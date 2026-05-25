@@ -1,131 +1,482 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>System Event Monitor</title>
-    <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+        integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+    />
 </head>
+
 <body>
     <div class="orb orb-a"></div>
     <div class="orb orb-b"></div>
     <div class="noise-layer"></div>
 
+    <!-- Navbar -->
     <nav class="navbar">
         <div class="navbar-container">
-            <a href="/" class="navbar-logo">
-                <span class="logo-icon"><i class="fa-solid fa-shield-halved"></i></span>
-                <span class="logo-text">FaceAI<span>Attend</span></span>
+
+            <a href="/admin" class="navbar-logo">
+                <span class="logo-icon">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </span>
+
+                <span class="logo-text">
+                    FaceAI<span>Attend</span>
+                </span>
             </a>
-            <button class="mobile-menu-toggle" type="button" aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button>
+
+            <button
+                class="mobile-menu-toggle"
+                type="button"
+                aria-label="Open navigation"
+            >
+                <i class="fa-solid fa-bars"></i>
+            </button>
+
             <div class="navbar-menu">
-                <a href="/" class="navbar-link">Dashboard</a>
-                <a href="/attendance" class="navbar-link">Attendance</a>
-                <a href="/#students" class="navbar-link">Students</a>
-                <a href="/#analytics" class="navbar-link">Analytics</a>
-                <a href="/system-events" class="navbar-link active">System Events</a>
+                <a href="/admin" class="navbar-link">Admin Dashboard</a>
+
+                <a href="/attendance" class="navbar-link">
+                    Attendance
+                </a>
+
+                <a href="/admin#students" class="navbar-link">
+                    Employees
+                </a>
+
+                <a href="/admin#analytics" class="navbar-link">
+                    Analytics
+                </a>
+
+                <a href="/system-events" class="navbar-link active">
+                    System Events
+                </a>
+
             </div>
+
             <div class="navbar-actions">
-                <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+                <button
+                    class="icon-button theme-toggle"
+                    type="button"
+                    aria-label="Toggle dark mode"
+                >
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+
+                <form method="POST" action="/logout">
+                    <button class="icon-button" type="submit" aria-label="Logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </form>
             </div>
+
         </div>
     </nav>
 
+    <!-- Main -->
     <main class="app-shell">
+
+        <!-- Hero Section -->
         <section class="page-hero reveal">
+
             <div>
-                <div class="status-chip"><span class="live-dot"></span> Real-time sync monitor</div>
+                <div class="status-chip">
+                    <span class="live-dot"></span>
+                    Real-time sync monitor
+                </div>
+
                 <h1>System Events</h1>
-                <p>Track startup, shutdown, sleep, wakeup, login, logout, lock and unlock activity in a security-grade timeline.</p>
+
+                <p>
+                    Track attendance, laptop startup, shutdown, sleep,
+                    wake, lock, unlock, idle, active and checkout events
+                    in a real-time operations timeline.
+                </p>
             </div>
-            <button id="refresh-system-events" class="btn btn-primary"><i class="fa-solid fa-rotate-right"></i> Refresh Events</button>
+
+            <div class="event-control-bar">
+                <button id="refresh-system-events" class="btn btn-primary"><i class="fa-solid fa-rotate-right"></i> Refresh Events</button>
+                <input type="datetime-local" aria-label="Date and time filter">
+                <label class="toggle-pill"><input type="checkbox" checked> <span></span> Real-time</label>
+                <a class="btn btn-secondary" href="/api/reports/attendance.xlsx"><i class="fa-solid fa-file-export"></i> Export Logs</a>
+            </div>
+
         </section>
 
+        <!-- Summary -->
         <section class="system-summary-grid reveal">
+
             <div class="summary-tile">
                 <span>Tracking Window</span>
+
                 <strong id="system-events-range">
+
                     <% const safeRange = typeof systemEventRange !== 'undefined' ? systemEventRange : null; %>
+
                     <% if (safeRange) { %>
-                        <%= new Date(safeRange.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %> - <%= new Date(safeRange.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %>
-                    <% } else { %>08:00 AM - Now<% } %>
+
+                        <%= new Date(safeRange.start).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) %>
+
+                        -
+
+                        <%= new Date(safeRange.end).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) %>
+
+                    <% } else { %>
+
+                        08:00 AM - Now
+
+                    <% } %>
+
                 </strong>
             </div>
-            <div class="summary-tile"><span>Total Events</span><strong id="system-events-count"><%= (typeof systemEvents !== 'undefined' ? systemEvents.length : 0) %></strong></div>
-            <div class="summary-tile"><span>Security Accuracy</span><strong id="system-events-accuracy">100%</strong></div>
-            <div class="summary-tile"><span>Live Sync</span><strong id="system-events-sync">Waiting</strong></div>
+
+            <div class="summary-tile">
+                <span>Total Events</span>
+
+                <strong id="system-events-count">
+                    <%= (typeof systemEvents !== 'undefined'
+                        ? systemEvents.length
+                        : 0) %>
+                </strong>
+            </div>
+
+            <div class="summary-tile">
+                <span>Security Accuracy</span>
+                <strong id="system-events-accuracy">100%</strong>
+            </div>
+
+            <div class="summary-tile">
+                <span>Live Sync</span>
+                <strong id="system-events-sync">Waiting</strong>
+            </div>
+
         </section>
 
+        <section class="live-tech-grid reveal">
+            <div class="tech-status-card"><span class="sync-wave"></span><strong>WebSocket connection</strong><p id="system-ws-status">Connecting live stream</p></div>
+            <div class="tech-status-card"><span class="sync-wave"></span><strong>MongoDB live stream</strong><p>Deduplicated event persistence active</p></div>
+            <div class="tech-status-card"><span class="sync-wave"></span><strong>Event collector</strong><p>Accepting device events during active sessions</p></div>
+            <div class="tech-status-card"><span class="sync-wave"></span><strong>Secure monitoring</strong><p>Employee scope enforced by role</p></div>
+        </section>
+
+        <section class="panel reveal">
+            <div class="panel-header split">
+                <div>
+                    <p class="eyebrow">User Filter</p>
+                    <h2>All Users</h2>
+                    <p class="helper-text">Search employees, filter by department or online status, then open a focused activity timeline.</p>
+                </div>
+                <div class="filter-controls large-filter">
+                    <input id="employee-event-search" type="search" placeholder="Search employee">
+                    <select><option>All departments</option><option>Engineering</option><option>Security</option><option>Operations</option></select>
+                    <select><option>All status</option><option>Online</option><option>Offline</option></select>
+                </div>
+            </div>
+            <div class="employee-filter-grid">
+                <% const safeStudents = typeof students !== 'undefined' ? students : []; %>
+                <% if (safeStudents.length === 0) { %><p class="helper-text">No registered employees found.</p><% } %>
+                <% safeStudents.forEach((student, index) => { %>
+                    <a class="employee-filter-card <%= selectedUser === student.name ? 'active' : '' %>" href="/system-events?user=<%= encodeURIComponent(student.name) %>">
+                        <span class="avatar"><%= student.name.slice(0, 2).toUpperCase() %></span>
+                        <span><strong><%= student.name %></strong><small><%= student.department || 'No department' %> · Last active <%= index + 2 %> min ago</small></span>
+                        <i class="status-dot <%= index % 4 === 0 ? 'offline' : '' %>"></i>
+                    </a>
+                <% }) %>
+            </div>
+        </section>
+
+        <!-- Event Types -->
         <section class="event-type-grid reveal">
-            <div class="event-type-card"><i class="fa-solid fa-power-off"></i><strong>Startup</strong><span>Boot detection</span></div>
-            <div class="event-type-card"><i class="fa-solid fa-plug-circle-xmark"></i><strong>Shutdown</strong><span>Power-off log</span></div>
-            <div class="event-type-card"><i class="fa-solid fa-moon"></i><strong>Sleep/Wakeup</strong><span>Session continuity</span></div>
-            <div class="event-type-card"><i class="fa-solid fa-right-to-bracket"></i><strong>Login/Logout</strong><span>User access</span></div>
-            <div class="event-type-card"><i class="fa-solid fa-lock"></i><strong>Lock/Unlock</strong><span>Screen security</span></div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-power-off"></i>
+                <strong>Startup</strong>
+                <span>Boot detection</span>
+            </div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-plug-circle-xmark"></i>
+                <strong>Shutdown</strong>
+                <span>Power-off log</span>
+            </div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-moon"></i>
+                <strong>Sleep/Wakeup</strong>
+                <span>Session continuity</span>
+            </div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-computer-mouse"></i>
+                <strong>Active/Idle</strong>
+                <span>OS input state</span>
+            </div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-lock"></i>
+                <strong>Lock/Unlock</strong>
+                <span>Screen security</span>
+            </div>
+
+            <div class="event-type-card">
+                <i class="fa-solid fa-user-check"></i>
+                <strong>Attendance</strong>
+                <span>Student activity</span>
+            </div>
+
         </section>
 
+        <!-- Dashboard Grid -->
         <section class="dashboard-grid reveal">
+
+            <!-- User Analytics -->
             <div class="panel">
+
                 <div class="panel-header">
                     <div>
                         <p class="eyebrow">User Analytics</p>
                         <h2>Activity Summary</h2>
                     </div>
                 </div>
-                <div id="user-summary" class="user-summary-container"></div>
+
+                <div
+                    id="user-summary"
+                    class="user-summary-container"
+                >
+                    No system activity records found.
+                </div>
+
             </div>
 
+            <!-- Live Feed -->
             <div class="panel">
+
                 <div class="panel-header">
                     <div>
                         <p class="eyebrow">Live Feed</p>
                         <h2>Sync Status</h2>
                     </div>
                 </div>
-                <div class="activity-feed">
-                    <div><span class="live-dot"></span><strong>Event collector</strong><p>Waiting for Windows monitor payloads.</p></div>
-                    <div><span class="live-dot"></span><strong>Mongo stream</strong><p>Deduplicated events are persisted by external id.</p></div>
-                    <div><span class="live-dot"></span><strong>Dashboard</strong><p>Auto-refresh runs every 30 seconds.</p></div>
+
+                <div class="activity-feed animated-feed">
+
+                    <div>
+                        <span class="live-dot"></span>
+
+                        <strong>Event collector</strong>
+
+                        <p>
+                            Waiting for Windows and attendance payloads.
+                        </p>
+                    </div>
+
+                    <div>
+                        <span class="live-dot"></span>
+
+                        <strong>Mongo stream</strong>
+
+                        <p>
+                            Deduplicated events are persisted
+                            by external id.
+                        </p>
+                    </div>
+
+                    <div>
+                        <span class="live-dot"></span>
+
+                        <strong>Dashboard</strong>
+
+                        <p>
+                            Live stream updates as attendance is marked.
+                        </p>
+                    </div>
+                    <% const feedEvents = typeof systemEvents !== 'undefined' ? systemEvents.slice(-5).reverse() : []; %>
+                    <% feedEvents.forEach((event) => { %>
+                        <div class="<%= event.event && event.event.includes('Shutdown') ? 'critical-feed' : '' %>">
+                            <span class="live-dot"></span>
+                            <strong><%= event.user || 'Unknown' %> <%= event.event %></strong>
+                            <p><%= event.meaning || event.message || new Date(event.occurredAt).toLocaleTimeString() %></p>
+                        </div>
+                    <% }) %>
+
                 </div>
+
             </div>
+
+        </section>
+
+        <!-- System Events -->
+        <section class="panel reveal">
+
+            <div class="panel-header split">
+
+                <div>
+                    <p class="eyebrow">Timeline</p>
+
+                    <h2>System Activity Events</h2>
+
+                    <p
+                        id="system-events-status"
+                        class="helper-text"
+                    >
+                        Showing activity from 8:00 AM to the current time.
+                    </p>
+                </div>
+
+                <div class="filter-controls">
+
+                    <label for="user-filter">
+                        User
+                    </label>
+
+                    <select id="user-filter">
+                        <option value="">
+                            All Users
+                        </option>
+                    </select>
+
+                </div>
+
+            </div>
+
+            <!-- Table -->
+            <div class="table-wrap">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Event</th>
+                            <th>Time</th>
+                            <th>Event ID</th>
+                            <th>Log</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="system-events-body">
+
+                        <% const safeSystemEvents =
+                            typeof systemEvents !== 'undefined'
+                            ? systemEvents
+                            : [];
+                        %>
+
+                        <% if (safeSystemEvents.length === 0) { %>
+
+                            <tr>
+                                <td colspan="6">
+                                    No system events have been captured
+                                    from 8:00 AM until now.
+                                </td>
+                            </tr>
+
+                        <% } %>
+
+                        <% safeSystemEvents.forEach((event) => { %>
+
+                            <tr
+                                class="event-row"
+                                data-user="<%= event.user %>"
+                            >
+
+                                <td>
+                                    <strong>
+                                        <%= event.user || 'Unknown' %>
+                                    </strong>
+                                </td>
+
+                                <td>
+                                    <span class="event-pill">
+                                        <%= event.event %>
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <%= new Date(event.occurredAt)
+                                        .toLocaleString() %>
+                                </td>
+
+                                <td>
+                                    <code>
+                                        <%= event.eventId %>
+                                    </code>
+                                </td>
+
+                                <td>
+                                    <%= event.sourceLog %>
+                                </td>
+
+                                <td>
+                                    <%= event.message
+                                        || event.meaning
+                                        || event.provider
+                                        || '-' %>
+                                </td>
+
+                            </tr>
+
+                        <% }) %>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
         </section>
 
         <section class="panel reveal">
-            <div class="panel-header split">
+            <div class="panel-header">
                 <div>
-                    <p class="eyebrow">Timeline</p>
-                    <h2>System Activity Events</h2>
-                    <p id="system-events-status" class="helper-text">Showing activity from 8:00 AM to the current time.</p>
-                </div>
-                <div class="filter-controls">
-                    <label for="user-filter">User</label>
-                    <select id="user-filter"><option value="">All Users</option></select>
+                    <p class="eyebrow">Professional Timeline</p>
+                    <h2>Live Activity Timeline</h2>
                 </div>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>User</th><th>Event</th><th>Time</th><th>Event ID</th><th>Log</th><th>Details</th></tr></thead>
-                    <tbody id="system-events-body">
-                        <% const safeSystemEvents = typeof systemEvents !== 'undefined' ? systemEvents : []; %>
-                        <% if (safeSystemEvents.length === 0) { %><tr><td colspan="6">No system event captured yet.</td></tr><% } %>
-                        <% safeSystemEvents.forEach((event) => { %>
-                            <tr class="event-row" data-user="<%= event.user %>">
-                                <td><strong><%= event.user || 'Unknown' %></strong></td>
-                                <td><span class="event-pill"><%= event.event %></span></td>
-                                <td><%= new Date(event.occurredAt).toLocaleString() %></td>
-                                <td><code><%= event.eventId %></code></td>
-                                <td><%= event.sourceLog %></td>
-                                <td><%= event.meaning || event.provider || '-' %></td>
-                            </tr>
-                        <% }) %>
-                    </tbody>
-                </table>
+            <div id="system-event-timeline" class="enterprise-timeline">
+                <% safeSystemEvents.slice(-24).reverse().forEach((event) => { %>
+                    <div class="enterprise-timeline-item">
+                        <span class="timeline-dot"></span>
+                        <div>
+                            <strong><%= event.event %></strong>
+                            <p><%= new Date(event.occurredAt).toLocaleString() %> · <%= event.user || 'Unknown employee' %> · <%= event.deviceState || event.computer || 'Device info pending' %></p>
+                            <small><%= event.sessionStatus || 'Session status pending' %> · <%= event.message || event.meaning || '-' %></small>
+                        </div>
+                    </div>
+                <% }) %>
+                <% if (safeSystemEvents.length === 0) { %>
+                    <div class="enterprise-timeline-item"><span class="timeline-dot"></span><div><strong>No timeline events yet</strong><p>Events will appear when attendance or active work-session tracking starts.</p></div></div>
+                <% } %>
             </div>
         </section>
+
     </main>
 
-    <div class="toast-stack" id="toast-stack"></div>
+    <!-- Toast -->
+    <div
+        class="toast-stack"
+        id="toast-stack"
+    ></div>
+
     <script src="/script.js"></script>
+
 </body>
 </html>

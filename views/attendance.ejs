@@ -14,21 +14,26 @@
 
     <nav class="navbar">
         <div class="navbar-container">
-            <a href="/" class="navbar-logo">
+            <a href="/admin" class="navbar-logo">
                 <span class="logo-icon"><i class="fa-solid fa-shield-halved"></i></span>
                 <span class="logo-text">FaceAI<span>Attend</span></span>
             </a>
             <button class="mobile-menu-toggle" type="button" aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button>
             <div class="navbar-menu">
-                <a href="/" class="navbar-link">Dashboard</a>
+                <% if (currentRole === 'admin') { %><a href="/admin" class="navbar-link">Admin Dashboard</a><% } %>
                 <a href="/attendance" class="navbar-link active">Attendance</a>
-                <a href="/#students" class="navbar-link">Students</a>
-                <a href="/#analytics" class="navbar-link">Analytics</a>
-                <a href="/system-events" class="navbar-link">System Events</a>
+                <% if (currentRole === 'admin') { %>
+                    <a href="/admin#students" class="navbar-link">Employees</a>
+                    <a href="/admin#analytics" class="navbar-link">Analytics</a>
+                    <a href="/system-events" class="navbar-link">System Events</a>
+                <% } else { %>
+                    <a href="/employee" class="navbar-link">My Dashboard</a>
+                <% } %>
             </div>
             <div class="navbar-actions">
                 <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
                 <button id="navbar-refresh" class="icon-button" type="button" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i></button>
+                <form method="POST" action="/logout"><button class="icon-button" type="submit" aria-label="Logout"><i class="fa-solid fa-right-from-bracket"></i></button></form>
             </div>
         </div>
     </nav>
@@ -41,11 +46,12 @@
                 <p>Start the camera and let the biometric engine identify registered faces in real time.</p>
             </div>
             <div class="hero-actions">
-                <a href="/" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
+                <a href="<%= currentRole === 'admin' ? '/admin' : '/employee' %>" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
                 <button id="refresh-attendance" class="btn btn-primary"><i class="fa-solid fa-rotate-right"></i> Refresh Records</button>
             </div>
         </section>
 
+        <% if (currentRole !== 'admin') { %>
         <section class="scanner-layout reveal">
             <div class="panel scanner-console">
                 <div class="panel-header">
@@ -85,10 +91,22 @@
                     <div><span class="live-dot"></span><strong>Camera</strong><p>Waiting for secure permission.</p></div>
                     <div><span class="live-dot"></span><strong>AI Worker</strong><p>Python recognition service prepared.</p></div>
                     <div><span class="live-dot"></span><strong>Database</strong><p>MongoDB Atlas attendance records synced.</p></div>
-                    <div><span class="live-dot"></span><strong>Cloud Media</strong><p>Cloudinary identity samples available.</p></div>
+                    <div><span class="live-dot"></span><strong>Local Media</strong><p>Localhost identity samples available.</p></div>
                 </div>
             </aside>
         </section>
+        <% } else { %>
+        <section class="panel reveal">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Admin Attendance Console</p>
+                    <h2>Attendance Monitoring</h2>
+                    <p class="helper-text">Face detection preview is available on the Employee dashboard. Admins can monitor records, reports and analytics here.</p>
+                </div>
+                <a class="btn btn-primary" href="/api/reports/attendance.xlsx"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+            </div>
+        </section>
+        <% } %>
 
         <section class="panel reveal">
             <div class="panel-header">

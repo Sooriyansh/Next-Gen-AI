@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signup | FaceAI Attend</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="noise-layer"></div>
+
+    <main class="auth-shell">
+        <section class="auth-panel reveal">
+            <a href="/login" class="navbar-logo auth-logo">
+                <span class="logo-icon"><i class="fa-solid fa-shield-halved"></i></span>
+                <span class="logo-text">FaceAI<span>Attend</span></span>
+            </a>
+            <div>
+                <p class="eyebrow">Account Setup</p>
+                <h1>Signup</h1>
+            </div>
+            <% if (typeof message !== 'undefined' && message) { %>
+                <p class="form-status"><%= message %></p>
+            <% } %>
+            <form class="stack-form" method="POST" action="/signup">
+                <div class="form-grid">
+                    <label><span>Name</span><input type="text" name="name" autocomplete="name" required></label>
+                    <label><span>Email</span><input type="email" name="email" autocomplete="email" required></label>
+                    <label><span>Password</span><input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+                    <label>
+                        <span>Role</span>
+                        <select name="role" id="signup-role" required>
+                            <option value="employee">Employee</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </label>
+                    <label class="employee-signup-field"><span>Face Label</span><input type="text" name="faceLabel" placeholder="raj_patel"></label>
+                    <label class="employee-signup-field"><span>Department</span><input type="text" name="department" placeholder="Computer Science"></label>
+                </div>
+                <button class="btn btn-primary wide" type="submit"><i class="fa-solid fa-user-plus"></i> Create Account</button>
+            </form>
+            <p class="auth-switch">Already registered? <a href="/login">Login</a></p>
+        </section>
+    </main>
+    <script src="/script.js"></script>
+</body>
+</html>

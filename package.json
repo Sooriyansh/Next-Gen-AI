@@ -11,6 +11,7 @@
     "py:train": "powershell -ExecutionPolicy Bypass -File .\\run-python.ps1 train_model.py",
     "py:recognize": "powershell -ExecutionPolicy Bypass -File .\\run-python.ps1 recognize_attendance.py",
     "py:system-events": "powershell -ExecutionPolicy Bypass -File .\\run-python.ps1 system_event_monitor.py",
+    "electron:client": "electron electron-client/main.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -20,6 +21,7 @@
   "dependencies": {
     "cloudinary": "^2.10.0",
     "dotenv": "^17.4.2",
+    "electron": "^39.2.6",
     "ejs": "^5.0.1",
     "express": "^5.2.1",
     "mongoose": "^9.4.1"

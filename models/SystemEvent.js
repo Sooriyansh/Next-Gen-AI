@@ -56,6 +56,33 @@ const systemEventSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    workSession: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'WorkSession',
+      default: null,
+      index: true,
+    },
+    employee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Student',
+      default: null,
+    },
+    sessionStatus: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    deviceState: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,

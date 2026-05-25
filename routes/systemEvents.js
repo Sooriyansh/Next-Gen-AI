@@ -1,6 +1,10 @@
 const express = require('express');
 
 const SystemEvent = require('../models/SystemEvent');
+const User = require('../models/User');
+const WorkSession = require('../models/WorkSession');
+const { systemEventBus } = require('../services/systemEventLogger');
+const { appendSessionEvent, dateKeyFor } = require('../services/workSessionService');
 
 const router = express.Router();
 
@@ -13,12 +17,43 @@ const ALLOWED_EVENTS = new Set([
   'Wakeup',
   'Lock',
   'Unlock',
-  'Login',
-  'Logout',
+  'Idle Time',
+  'Active Usage Time',
+  'Device Offline',
+  'Device Online',
+  'Internet Connected',
+  'Internet Disconnected',
+  'Battery Status',
+  'Check-Out Completed',
+  'Attendance Marked',
+  'Attendance Duplicate',
+  'Monitoring Permission Allowed',
+  'Monitoring Permission Denied',
 ]);
+const ALLOWED_EVENT_LIST = Array.from(ALLOWED_EVENTS);
 
 const WORKDAY_START_HOUR = 8;
 const WORKDAY_END_HOUR = 17;
+
+function requireAdmin(req, res) {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: 'Authentication required' });
+    return false;
+  }
+
+  if (req.user?.role === 'admin') {
+    return true;
+  }
+
+  res.status(403).json({ success: false, message: 'Only admins can access system-wide activity.' });
+  return false;
+}
+
+function hasValidCollectorToken(req) {
+  const configuredToken = process.env.SYSTEM_COLLECTOR_TOKEN || '';
+  const providedToken = String(req.headers['x-collector-token'] || req.headers.authorization?.replace(/^Bearer\s+/i, '') || '').trim();
+  return Boolean(configuredToken && providedToken && configuredToken === providedToken);
+}
 
 function getWorkdayRange(now = new Date()) {
   const start = new Date(now);
@@ -29,7 +64,7 @@ function getWorkdayRange(now = new Date()) {
 
   return {
     start,
-    end: now < end ? now : end,
+    end: now,
     fixedEnd: end,
   };
 }
@@ -53,6 +88,7 @@ function normalizeSystemEvent(rawEvent) {
   const eventId = Number(rawEvent.eventId);
   const sourceLog = String(rawEvent.sourceLog || '').trim();
   const externalId = String(rawEvent.externalId || '').trim();
+  const user = String(rawEvent.user || rawEvent.employeeEmail || '').trim();
 
   if (
     !ALLOWED_EVENTS.has(event) ||
@@ -73,14 +109,37 @@ function normalizeSystemEvent(rawEvent) {
     provider: String(rawEvent.provider || '').trim(),
     recordNumber: Number.isFinite(Number(rawEvent.recordNumber)) ? Number(rawEvent.recordNumber) : null,
     computer: String(rawEvent.computer || '').trim(),
-    user: String(rawEvent.user || '').trim(),
+    user,
     message: String(rawEvent.message || '').trim().slice(0, 2000),
     externalId,
   };
 }
 
+function deviceStateForEvent(eventName) {
+  const states = {
+    Startup: 'Active Working',
+    Wakeup: 'Active Working',
+    'Active Usage Time': 'Active Working',
+    'Idle Time': 'Idle',
+    Sleep: 'Sleep Mode',
+    Lock: 'Locked',
+    Unlock: 'Active Working',
+    Shutdown: 'Shutdown',
+    'Unexpected Shutdown': 'Shutdown',
+    Restart: 'Restart',
+    'Device Offline': 'Offline',
+    'Device Online': 'Active Working',
+    'Monitoring Permission Denied': 'Monitoring Permission Denied',
+  };
+  return states[eventName] || eventName;
+}
+
 router.get('/', async (req, res, next) => {
   try {
+    if (!requireAdmin(req, res)) {
+      return;
+    }
+
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
     const mode = String(req.query.mode || '').trim();
     const selectedUser = String(req.query.user || '').trim();
@@ -90,6 +149,7 @@ router.get('/', async (req, res, next) => {
     const sortDirection = String(req.query.sort || '').toLowerCase() === 'asc' ? 1 : -1;
 
     const query = {};
+    query.event = { $in: ALLOWED_EVENT_LIST };
     if (from || to) {
       query.occurredAt = {};
       if (from) {
@@ -122,9 +182,36 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+router.get('/stream', (req, res) => {
+  if (!requireAdmin(req, res)) {
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const sendEvent = (event) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  res.write(`event: ready\ndata: ${JSON.stringify({ success: true })}\n\n`);
+  systemEventBus.on('created', sendEvent);
+
+  req.on('close', () => {
+    systemEventBus.off('created', sendEvent);
+    res.end();
+  });
+});
+
 // Get all unique users and their activity summary
 router.get('/users/analytics', async (req, res, next) => {
   try {
+    if (!requireAdmin(req, res)) {
+      return;
+    }
+
     const workdayRange = getWorkdayRange();
     const from = parseDateQuery(req.query.from) || workdayRange.start;
     const to = parseDateQuery(req.query.to) || workdayRange.end;
@@ -137,6 +224,7 @@ router.get('/users/analytics', async (req, res, next) => {
             $lte: to,
           },
           user: { $ne: '', $exists: true },
+          event: { $in: ALLOWED_EVENT_LIST },
         },
       },
       {
@@ -181,6 +269,10 @@ router.get('/users/analytics', async (req, res, next) => {
 // Get detailed activity for a specific user
 router.get('/users/:userId/activity', async (req, res, next) => {
   try {
+    if (!requireAdmin(req, res)) {
+      return;
+    }
+
     const userId = String(req.params.userId || '').trim();
     const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 1000);
     const workdayRange = getWorkdayRange();
@@ -189,6 +281,7 @@ router.get('/users/:userId/activity', async (req, res, next) => {
 
     const events = await SystemEvent.find({
       user: userId,
+      event: { $in: ALLOWED_EVENT_LIST },
       occurredAt: {
         $gte: from,
         $lte: to,
@@ -227,8 +320,23 @@ router.get('/users/:userId/activity', async (req, res, next) => {
 
 router.post('/ingest', async (req, res, next) => {
   try {
+    const collectorAuthorized = hasValidCollectorToken(req);
+    if (!req.user && !collectorAuthorized) {
+      return res.status(401).json({ success: false, message: 'Authentication or collector token required' });
+    }
+
     const payloadEvents = Array.isArray(req.body.events) ? req.body.events : [req.body];
-    const events = payloadEvents.map(normalizeSystemEvent).filter(Boolean);
+    const scopedPayloadEvents = payloadEvents.map((event) => {
+      if (collectorAuthorized || req.user?.role === 'admin') {
+        return event;
+      }
+
+      return {
+        ...event,
+        user: req.user.name || req.user.email,
+      };
+    });
+    const events = scopedPayloadEvents.map(normalizeSystemEvent).filter(Boolean);
 
     if (events.length === 0) {
       return res.status(400).json({
@@ -237,8 +345,73 @@ router.post('/ingest', async (req, res, next) => {
       });
     }
 
+    const acceptedEvents = [];
+
+    for (const event of events) {
+      const employeeQuery =
+        collectorAuthorized || req.user?.role === 'admin'
+          ? {
+              role: 'employee',
+              $or: [{ name: event.user }, { email: event.user }, { email: event.employeeEmail }],
+            }
+          : {
+              _id: req.user._id,
+              role: 'employee',
+            };
+
+      const employee = await User.findOne(employeeQuery)
+        .populate('student')
+        .lean();
+
+      if (employee) {
+        const session = await WorkSession.findOne({
+          user: employee._id,
+          dateKey: dateKeyFor(event.occurredAt),
+        });
+
+        if (!session || session.status === 'Checked Out') {
+          continue;
+        }
+
+        if (session.monitoringConsent !== 'Allowed' && !['Monitoring Permission Allowed', 'Monitoring Permission Denied'].includes(event.event)) {
+          continue;
+        }
+
+        event.employee = employee._id;
+        event.student = employee.student?._id || employee.student || null;
+        event.workSession = session._id;
+        event.sessionStatus = session.status;
+        event.deviceState = deviceStateForEvent(event.event);
+
+        await appendSessionEvent(session, {
+          type: event.event,
+          label: event.message || event.meaning || event.event,
+          source: 'collector',
+          occurredAt: event.occurredAt,
+          deviceState: event.deviceState,
+          metadata: {
+            eventId: event.eventId,
+            computer: event.computer,
+            sourceLog: event.sourceLog,
+          },
+        });
+      }
+
+      acceptedEvents.push(event);
+    }
+
+    if (acceptedEvents.length === 0) {
+      return res.json({
+        success: true,
+        received: events.length,
+        inserted: 0,
+        ignored: events.length,
+        message: 'Events were ignored because no active work session is open, or the employee already checked out.',
+      });
+    }
+
     const result = await SystemEvent.bulkWrite(
-      events.map((event) => ({
+      acceptedEvents.map((event) => ({
         updateOne: {
           filter: { externalId: event.externalId },
           update: { $setOnInsert: event },
@@ -251,6 +424,7 @@ router.post('/ingest', async (req, res, next) => {
     res.status(201).json({
       success: true,
       received: events.length,
+      accepted: acceptedEvents.length,
       inserted: result.upsertedCount || 0,
     });
   } catch (error) {

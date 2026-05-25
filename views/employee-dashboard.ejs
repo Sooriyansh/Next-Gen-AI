@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+    <% const safeRecords = typeof records !== 'undefined' ? records : []; %>
+    <% const safeMonthRecords = typeof monthRecords !== 'undefined' ? monthRecords : []; %>
+    <% const safeStudent = typeof student !== 'undefined' ? student : null; %>
+    <% const latestRecord = safeRecords[0]; %>
+    <% const safeFaceLogs = typeof faceLogs !== 'undefined' ? faceLogs : []; %>
+    <% const workSession = typeof todayWorkSession !== 'undefined' ? todayWorkSession : null; %>
+    <% const todayKey = new Date().toISOString().slice(0, 10); %>
+    <% const todayRecord = safeRecords.find((record) => record.dateKey === todayKey); %>
+    <% const sessionEvents = workSession && Array.isArray(workSession.events) ? workSession.events.slice(-8).reverse() : []; %>
+
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="noise-layer"></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/employee" class="navbar-logo">
+                <span class="logo-icon"><i class="fa-solid fa-user-tie"></i></span>
+                <span class="logo-text">FaceAI<span>Attend</span></span>
+            </a>
+            <button class="mobile-menu-toggle" type="button" aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button>
+            <div class="navbar-menu">
+                <a href="/employee" class="navbar-link active">My Dashboard</a>
+                <a href="#identity-enrollment" class="navbar-link">Identity Enrollment</a>
+                <a href="/attendance" class="navbar-link">Mark Attendance</a>
+            </div>
+            <div class="navbar-actions">
+                <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+                <form method="POST" action="/logout"><button class="icon-button" type="submit" aria-label="Logout"><i class="fa-solid fa-right-from-bracket"></i></button></form>
+            </div>
+        </div>
+    </nav>
+
+    <main class="app-shell">
+        <section class="page-hero reveal">
+            <div>
+                <div class="status-chip"><span class="live-dot"></span> Employee access</div>
+                <h1>My Dashboard</h1>
+                <p>Mark attendance with face recognition and track only your own attendance, device activity, login history and system events.</p>
+            </div>
+            <div class="hero-actions">
+                <a href="#face-recognition" class="btn btn-primary"><i class="fa-solid fa-camera"></i> Open Face Scanner</a>
+                <button id="employee-checkout" class="btn btn-secondary" type="button"><i class="fa-solid fa-door-open"></i> Complete Daily Task</button>
+            </div>
+        </section>
+
+        <section class="student-summary-grid reveal">
+            <div class="summary-tile"><span>Check-in Status</span><strong><%= todayRecord ? 'Checked In' : 'Not Marked' %></strong></div>
+            <div class="summary-tile"><span>Check-out</span><strong><%= todayRecord && todayRecord.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString() : '-' %></strong></div>
+            <div class="summary-tile"><span>This Month</span><strong><%= safeMonthRecords.length %> days</strong></div>
+            <div class="summary-tile"><span>Last Activity</span><strong><%= latestRecord ? new Date(latestRecord.markedAt).toLocaleDateString() : '-' %></strong></div>
+        </section>
+
+        <section class="panel reveal work-session-panel" id="daily-work-session">
+            <div class="panel-header split">
+                <div>
+                    <p class="eyebrow">Daily Work Session</p>
+                    <h2>Smart Activity Tracking</h2>
+                    <p class="helper-text">Tracking starts only after attendance and your monitoring permission. It records device state, idle, sleep, lock, wake and shutdown events only.</p>
+                </div>
+                <span class="panel-badge"><span class="live-dot"></span> <span id="employee-session-sync">Secure session monitoring</span></span>
+            </div>
+            <div class="work-session-grid">
+                <div class="session-status-card">
+                    <span>Live Working Status</span>
+                    <strong id="employee-session-status"><%= workSession ? workSession.status : 'Offline' %></strong>
+                    <p id="employee-device-state"><%= workSession ? workSession.deviceState : 'Tracking starts after attendance' %></p>
+                </div>
+                <div class="session-status-card">
+                    <span>Session Timer</span>
+                    <strong id="employee-session-timer" data-started-at="<%= workSession && workSession.startedAt ? new Date(workSession.startedAt).toISOString() : '' %>" data-checkout-at="<%= workSession && workSession.checkoutAt ? new Date(workSession.checkoutAt).toISOString() : '' %>">00:00:00</strong>
+                    <p>Total working hours</p>
+                </div>
+                <div class="session-status-card">
+                    <span>Productivity Score</span>
+                    <strong id="employee-productivity-score"><%= workSession ? workSession.productivityScore : 0 %>%</strong>
+                    <p>Active usage vs idle time</p>
+                </div>
+                <div class="session-status-card">
+                    <span>Collector Status</span>
+                    <strong id="employee-collector-state"><%= workSession && workSession.monitoringConsent === 'Denied' ? 'Permission Denied' : workSession && workSession.monitoringConsent === 'Allowed' && workSession.status !== 'Checked Out' ? 'Device Collector Active' : 'Permission Pending' %></strong>
+                    <p>System-level device events only</p>
+                </div>
+                <div class="session-status-card">
+                    <span>Active Duration</span>
+                    <strong><%= Math.floor((workSession?.totalActiveSeconds || 0) / 3600) %>h <%= Math.floor(((workSession?.totalActiveSeconds || 0) % 3600) / 60) %>m</strong>
+                    <p>Keyboard/mouse activity from OS collector</p>
+                </div>
+                <div class="session-status-card">
+                    <span>Idle Duration</span>
+                    <strong><%= Math.floor((workSession?.totalIdleSeconds || 0) / 3600) %>h <%= Math.floor(((workSession?.totalIdleSeconds || 0) % 3600) / 60) %>m</strong>
+                    <p>No OS input detected</p>
+                </div>
+                <div class="session-status-card">
+                    <span>Sleep/Lock Duration</span>
+                    <strong><%= Math.floor((workSession?.totalBreakSeconds || 0) / 3600) %>h <%= Math.floor(((workSession?.totalBreakSeconds || 0) % 3600) / 60) %>m</strong>
+                    <p>Sleep mode and locked screen</p>
+                </div>
+            </div>
+            <div class="session-monitor-layout">
+                <div>
+                    <div class="panel-header compact"><div><p class="eyebrow">Activity Monitor Panel</p><h2>Live Events</h2></div></div>
+                    <div id="employee-session-events" class="security-timeline compact-timeline">
+                        <% if (sessionEvents.length === 0) { %>
+                            <div class="timeline-event"><span class="timeline-dot"></span><div><strong>Waiting for session activity</strong><p>Attendance and system-level device activity will appear here.</p></div></div>
+                        <% } %>
+                        <% sessionEvents.forEach((event) => { %>
+                            <div class="timeline-event severity-success">
+                                <span class="timeline-dot"></span>
+                                <div><strong><%= event.type %></strong><p><%= event.label || event.deviceState || '-' %> · <%= new Date(event.occurredAt).toLocaleTimeString() %></p></div>
+                            </div>
+                        <% }) %>
+                    </div>
+                </div>
+                <div class="activity-feed">
+                    <div><span class="live-dot"></span><strong>WebSocket connection</strong><p id="employee-ws-status">Connecting secure live stream.</p></div>
+                    <div><span class="live-dot"></span><strong>MongoDB live stream</strong><p>Session updates sync instantly to admin monitoring.</p></div>
+                    <div><span class="live-dot"></span><strong>Event collector</strong><p>Native laptop events are accepted only after attendance, permission and before checkout.</p></div>
+                    <button id="employee-checkout-panel" class="btn btn-primary wide" type="button"><i class="fa-solid fa-circle-check"></i> Complete Daily Task</button>
+                </div>
+            </div>
+        </section>
+
+        <% if (!safeStudent) { %>
+            <section class="panel reveal">
+                <div class="empty-state">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <h2>Profile not linked</h2>
+                    <p>Your account is ready for self enrollment. Register your face data below to activate attendance.</p>
+                </div>
+            </section>
+        <% } %>
+
+            <section class="biometric-enrollment-grid reveal" id="identity-enrollment">
+                <div class="panel biometric-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="eyebrow">Identity Enrollment</p>
+                            <h2><%= safeStudent && safeStudent.enrollmentImages && safeStudent.enrollmentImages.length ? 'Update Face Data' : 'Register Your Face' %></h2>
+                        </div>
+                        <span class="panel-badge"><span class="live-dot"></span> Secure biometric setup</span>
+                    </div>
+                    <form id="student-form" class="stack-form" data-endpoint="/api/students/me/enrollment" data-method="PUT">
+                        <div class="form-grid">
+                            <label><span>Name</span><input type="text" name="name" value="<%= safeStudent ? safeStudent.name : currentUser.name %>" required></label>
+                            <label><span>Face Label</span><input type="text" name="faceLabel" value="<%= safeStudent ? safeStudent.faceLabel : '' %>" placeholder="rahul_sharma" required></label>
+                            <label><span>Department</span><input type="text" name="department" value="<%= safeStudent ? safeStudent.department : currentUser.department || '' %>" placeholder="Security"></label>
+                            <label><span>Email</span><input type="email" name="email" value="<%= safeStudent ? safeStudent.email || currentUser.email : currentUser.email %>"></label>
+                            <input type="hidden" name="joiningDate" value="<%= safeStudent && safeStudent.joiningDate ? new Date(safeStudent.joiningDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10) %>">
+                            <input type="hidden" name="rollNumber" value="<%= safeStudent ? safeStudent.rollNumber || '' : '' %>">
+                        </div>
+                        <div class="camera-shell enrollment-shell biometric-camera">
+                            <div class="camera-frame scanner-frame large">
+                                <video id="enrollment-camera-feed" autoplay playsinline muted></video>
+                                <canvas id="enrollment-camera-canvas" hidden></canvas>
+                                <span class="camera-reticle"></span>
+                                <span class="scan-line camera-scan"></span>
+                                <div class="face-guide-ring"><i class="fa-solid fa-face-smile"></i></div>
+                            </div>
+                            <div class="validation-grid">
+                                <div><i class="fa-solid fa-lightbulb"></i><span>Lighting</span><strong>Good</strong></div>
+                                <div><i class="fa-solid fa-arrows-to-eye"></i><span>Alignment</span><strong>Centered</strong></div>
+                                <div><i class="fa-solid fa-layer-group"></i><span>Angles</span><strong>Multi-scan</strong></div>
+                                <div><i class="fa-solid fa-shield-heart"></i><span>AI Validation</span><strong>Ready</strong></div>
+                            </div>
+                            <div class="enrollment-progress"><span style="--progress: 72%"></span></div>
+                            <div class="camera-controls">
+                                <button type="button" id="start-enrollment-camera" class="btn btn-secondary"><i class="fa-solid fa-video"></i> Start Camera</button>
+                                <button type="button" id="capture-enrollment" class="btn btn-primary"><i class="fa-solid fa-crosshairs"></i> Multi-angle Capture</button>
+                                <button type="button" id="stop-enrollment-camera" class="btn btn-secondary"><i class="fa-solid fa-video-slash"></i> Stop Camera</button>
+                            </div>
+                            <p id="enrollment-camera-status" class="helper-text">Camera is off. Use a bright front-facing position and keep your face inside the guide.</p>
+                            <p id="enrollment-sample-status" class="form-status">Minimum: 6 samples | Recommended: 12 multi-angle samples</p>
+                        </div>
+                        <div id="enrollment-preview" class="sample-grid"></div>
+                        <button type="submit" class="btn btn-primary wide"><i class="fa-solid fa-fingerprint"></i> <%= safeStudent && safeStudent.enrollmentImages && safeStudent.enrollmentImages.length ? 'Update Face Data' : 'Register Face' %></button>
+                        <p id="student-form-status" class="form-status">Secure biometric upload indicator is ready. Images save locally and retrain the AI model.</p>
+                    </form>
+                </div>
+                <aside class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Scan Guidance</p><h2>Quality Checklist</h2></div></div>
+                    <div class="activity-feed">
+                        <div><span class="live-dot"></span><strong>Look straight</strong><p>Keep your face centered in the neon frame.</p></div>
+                        <div><span class="live-dot"></span><strong>Capture angles</strong><p>Slowly turn left, right, up and down during multi-scan capture.</p></div>
+                        <div><span class="live-dot"></span><strong>Lighting detection</strong><p>Use even light and avoid heavy shadows or backlight.</p></div>
+                        <div><span class="live-dot"></span><strong>Activation</strong><p>Attendance activates automatically after successful model training.</p></div>
+                    </div>
+                </aside>
+            </section>
+
+        <% if (safeStudent) { %>
+            <section class="scanner-layout reveal" id="face-recognition">
+                <div class="panel scanner-console">
+                    <div class="panel-header">
+                        <div>
+                            <p class="eyebrow">Face Recognition Attendance</p>
+                            <h2>Preview Camera</h2>
+                        </div>
+                        <span class="panel-badge"><span class="live-dot"></span> Employee only</span>
+                    </div>
+                    <div class="camera-shell">
+                        <div class="camera-frame scanner-frame large">
+                            <video id="camera-feed" autoplay playsinline muted></video>
+                            <canvas id="camera-canvas" hidden></canvas>
+                            <span class="camera-reticle"></span>
+                            <span class="scan-line camera-scan"></span>
+                        </div>
+                        <div class="camera-controls">
+                            <button type="button" id="start-camera" class="btn btn-primary"><i class="fa-solid fa-video"></i> Start Camera</button>
+                            <button type="button" id="scan-now" class="btn btn-secondary"><i class="fa-solid fa-fingerprint"></i> Mark Attendance</button>
+                            <button type="button" id="stop-camera" class="btn btn-secondary"><i class="fa-solid fa-video-slash"></i> Stop</button>
+                        </div>
+                        <p id="camera-status" class="helper-text">Camera is off.</p>
+                        <p id="location-status" class="helper-text">Location permission is requested when camera starts.</p>
+                        <p id="camera-loader" class="loading-skeleton"></p>
+                        <p id="recognition-result" class="form-status">Keep your face centered inside the frame.</p>
+                    </div>
+                </div>
+
+                <aside class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Device Status</p><h2>Live Sync</h2></div></div>
+                    <div class="activity-feed">
+                        <div><span class="live-dot"></span><strong>Face recognition AI</strong><p>Ready for your linked face label <code><%= safeStudent.faceLabel %></code>.</p></div>
+                        <div><span class="live-dot"></span><strong>Device monitor</strong><p>Laptop ON/OFF, lock/unlock and sleep/wakeup events are scoped to your account.</p></div>
+                        <div><span class="live-dot"></span><strong>Working hours</strong><p><%= todayRecord ? new Date(todayRecord.markedAt).toLocaleTimeString() : 'Not checked in' %> - <%= todayRecord && todayRecord.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString() : 'Active' %></p></div>
+                    </div>
+                </aside>
+            </section>
+
+            <section class="dashboard-grid reveal">
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Profile</p><h2>My Details</h2></div></div>
+                    <div class="detail-list">
+                        <div><span>Name</span><strong><%= safeStudent.name %></strong></div>
+                        <div><span>Face Label</span><strong><code><%= safeStudent.faceLabel %></code></strong></div>
+                        <div><span>Department</span><strong><%= safeStudent.department || '-' %></strong></div>
+                        <div><span>Email</span><strong><%= safeStudent.email || currentUser.email || '-' %></strong></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Monthly Summary</p><h2>Attendance</h2></div></div>
+                    <div class="bar-chart compact-chart">
+                        <% for (let day = 1; day <= 7; day += 1) { %>
+                            <span style="--h: <%= safeMonthRecords.length ? Math.min(95, 30 + safeMonthRecords.length * 7) : 12 %>%"><b>W<%= day %></b></span>
+                        <% } %>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-grid reveal">
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Personal Activity</p><h2>Timeline</h2></div></div>
+                    <div class="security-timeline compact-timeline">
+                        <% safeRecords.slice(0, 8).forEach((record) => { %>
+                            <div class="timeline-event severity-success">
+                                <span class="timeline-dot"></span>
+                                <div><strong>Attendance marked successfully</strong><p><%= new Date(record.markedAt).toLocaleString() %> · Confidence <%= Number(record.confidence || 0).toFixed(3) %></p></div>
+                            </div>
+                        <% }) %>
+                        <% safeRecords.length === 0 && safeFaceLogs.length === 0 ? null : '' %>
+                        <% safeFaceLogs.slice(0, 5).forEach((log) => { %>
+                            <div class="timeline-event <%= log.recognized ? 'severity-success' : 'severity-danger' %>">
+                                <span class="timeline-dot"></span>
+                                <div><strong>Face recognition <%= log.recognized ? 'verified' : 'rejected' %></strong><p><%= new Date(log.scannedAt).toLocaleString() %></p></div>
+                            </div>
+                        <% }) %>
+                        <% if (safeRecords.length === 0 && safeFaceLogs.length === 0) { %>
+                            <div class="timeline-event"><span class="timeline-dot"></span><div><strong>No personal activity yet</strong><p>Your events will appear here in real time.</p></div></div>
+                        <% } %>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Login History</p><h2>Access Scope</h2></div></div>
+                    <div class="activity-feed">
+                        <div><span class="live-dot"></span><strong>Own records only</strong><p>Employees cannot access admin analytics or other employee data.</p></div>
+                        <div><span class="live-dot"></span><strong>System events</strong><p>Personal startup, shutdown, login/logout and lock/unlock activity appears here when collected.</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel reveal">
+                <div class="panel-header">
+                    <div><p class="eyebrow">Attendance</p><h2>Personal History</h2></div>
+                    <p id="employee-action-status" class="helper-text">Showing latest <%= safeRecords.length %> record(s).</p>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Confidence</th></tr></thead>
+                        <tbody>
+                            <% if (safeRecords.length === 0) { %><tr><td colspan="5">No attendance activity found.</td></tr><% } %>
+                            <% safeRecords.forEach((record) => { %>
+                                <tr>
+                                    <td><%= record.dateKey %></td>
+                                    <td><%= new Date(record.markedAt).toLocaleString() %></td>
+                                    <td><%= record.checkOutAt ? new Date(record.checkOutAt).toLocaleString() : '-' %></td>
+                                    <td><%= record.status || 'Present' %></td>
+                                    <td><%= Number(record.confidence || 0).toFixed(3) %></td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        <% } %>
+    </main>
+
+    <div class="toast-stack" id="toast-stack"></div>
+    <div class="modal-backdrop" id="checkout-modal" hidden>
+        <div class="checkout-modal">
+            <div class="panel-header">
+                <div><p class="eyebrow">Finish Work Session</p><h2>What work did you complete today?</h2></div>
+                <button class="icon-button" id="checkout-modal-close" type="button" aria-label="Close checkout modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <textarea id="checkout-note" rows="6" placeholder="Summarize completed tasks, blockers, handoff notes, or daily outcomes."></textarea>
+            <p id="checkout-modal-status" class="form-status">A short note is required before tracking stops.</p>
+            <button id="finish-work-session" class="btn btn-primary wide" type="button"><i class="fa-solid fa-flag-checkered"></i> Finish Work Session</button>
+        </div>
+    </div>
+    <script src="/script.js"></script>
+</body>
+</html>

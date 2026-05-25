@@ -13,6 +13,7 @@ const EMBEDDINGS_PATH = path.join(MODELS_ROOT, 'face_embeddings.npz');
 const TRAIN_SCRIPT = path.join(PROJECT_ROOT, 'python', 'train_model.py');
 
 let modelBuildPromise = null;
+let trainPromise = null;
 
 async function pathExists(filePath) {
   try {
@@ -24,21 +25,40 @@ async function pathExists(filePath) {
 }
 
 async function trainEmbeddings() {
-  await fs.mkdir(MODELS_ROOT, { recursive: true });
+  if (!trainPromise) {
+    trainPromise = (async () => {
+      await fs.mkdir(MODELS_ROOT, { recursive: true });
 
-  await execFileAsync(getPythonExecutable(), [TRAIN_SCRIPT], {
-    cwd: PROJECT_ROOT,
-    timeout: 300000,
-    windowsHide: true,
-    maxBuffer: 1024 * 1024,
-    env: {
-      ...process.env,
-      TF_CPP_MIN_LOG_LEVEL: '2',
-    },
-  });
+      await execFileAsync(getPythonExecutable(), [TRAIN_SCRIPT], {
+        cwd: PROJECT_ROOT,
+        timeout: 300000,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+        env: {
+          ...process.env,
+          TF_CPP_MIN_LOG_LEVEL: '2',
+        },
+      });
+    })().finally(() => {
+      trainPromise = null;
+    });
+  }
+
+  await trainPromise;
 }
 
 async function downloadImage(url) {
+  if (String(url || '').startsWith('/local-dataset/')) {
+    const relativePath = decodeURIComponent(String(url).replace('/local-dataset/', ''));
+    const localPath = path.resolve(DATASET_ROOT, relativePath);
+
+    if (!localPath.startsWith(DATASET_ROOT)) {
+      throw new Error('Invalid local enrollment image path.');
+    }
+
+    return fs.readFile(localPath);
+  }
+
   const response = await fetch(url);
 
   if (!response.ok) {

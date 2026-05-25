@@ -1,4 +1,5 @@
 import argparse
+import ctypes
 import os
 import platform
 import socket
@@ -62,16 +63,6 @@ SECURITY_EVENT_MAP = {
     4801: {
         "event": "Unlock",
         "meaning": "Screen unlock",
-        "providers": {"Microsoft-Windows-Security-Auditing"},
-    },
-    4624: {
-        "event": "Login",
-        "meaning": "User login",
-        "providers": {"Microsoft-Windows-Security-Auditing"},
-    },
-    4634: {
-        "event": "Logout",
-        "meaning": "User logout",
         "providers": {"Microsoft-Windows-Security-Auditing"},
     },
 }
@@ -168,7 +159,7 @@ def read_windows_events(max_records):
                             "provider": provider,
                             "recordNumber": record_number,
                             "computer": str(event.ComputerName or computer_name),
-                            "user": "",
+                            "user": os.getenv("EMPLOYEE_EMAIL") or os.getenv("USERNAME", ""),
                             "message": message[:2000],
                             "externalId": f"{log_name}:{record_number}:{current_event_id}",
                         }
@@ -206,18 +197,77 @@ def add_boot_event(events):
     return events
 
 
-def post_events(api_url, events):
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+
+def get_idle_seconds():
+    last_input = LASTINPUTINFO()
+    last_input.cbSize = ctypes.sizeof(last_input)
+    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(last_input)):
+        return 0
+    millis = ctypes.windll.kernel32.GetTickCount() - last_input.dwTime
+    return max(0, int(millis / 1000))
+
+
+def add_activity_state_event(events, idle_threshold_seconds):
+    idle_seconds = get_idle_seconds()
+    now = time.time()
+    event_name = "Idle Time" if idle_seconds >= idle_threshold_seconds else "Active Usage Time"
+    events.append(
+        {
+            "event": event_name,
+            "meaning": "No OS input detected" if event_name == "Idle Time" else "Keyboard or mouse activity detected by OS",
+            "occurredAt": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now)),
+            "eventId": 9302 if event_name == "Idle Time" else 9301,
+            "sourceLog": "Windows Idle Detection",
+            "provider": "GetLastInputInfo",
+            "recordNumber": None,
+            "computer": socket.gethostname(),
+            "user": os.getenv("EMPLOYEE_EMAIL") or os.getenv("USERNAME", ""),
+            "message": f"OS idle seconds: {idle_seconds}",
+            "externalId": f"idle:{socket.gethostname()}:{event_name}:{int(now // 30)}",
+        }
+    )
+    return events
+
+
+def add_device_health_events(events):
+    now = time.time()
+    events.append(
+        {
+            "event": "Device Online",
+            "meaning": "Device collector heartbeat",
+            "occurredAt": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now)),
+            "eventId": 9303,
+            "sourceLog": "Device Collector",
+            "provider": "Heartbeat",
+            "recordNumber": None,
+            "computer": socket.gethostname(),
+            "user": os.getenv("EMPLOYEE_EMAIL") or os.getenv("USERNAME", ""),
+            "message": "Device collector is online.",
+            "externalId": f"heartbeat:{socket.gethostname()}:{int(now // 60)}",
+        }
+    )
+    return events
+
+
+def post_events(api_url, events, collector_token):
     if not events:
         return {"received": 0, "inserted": 0}
 
-    response = requests.post(api_url, json={"events": events}, timeout=15)
+    headers = {}
+    if collector_token:
+        headers["X-Collector-Token"] = collector_token
+
+    response = requests.post(api_url, json={"events": events}, headers=headers, timeout=15)
     response.raise_for_status()
     return response.json()
 
 
-def run_once(api_url, max_records):
-    events = add_boot_event(read_windows_events(max_records))
-    result = post_events(api_url, events)
+def run_once(api_url, max_records, collector_token, idle_threshold_seconds):
+    events = add_device_health_events(add_activity_state_event(add_boot_event(read_windows_events(max_records)), idle_threshold_seconds))
+    result = post_events(api_url, events, collector_token)
     print(
         f"Sent {result.get('received', 0)} event(s), inserted {result.get('inserted', 0)} new event(s).",
         flush=True,
@@ -228,25 +278,31 @@ def main():
     parser = argparse.ArgumentParser(description="Monitor Windows system events and send them to the dashboard API.")
     parser.add_argument(
         "--api-url",
-        default="http://localhost:3000/api/system-events/ingest",
+        default=os.getenv("SYSTEM_EVENTS_API_URL", "http://localhost:8080/api/system-events/ingest"),
         help="Node API endpoint that stores system events.",
     )
     parser.add_argument("--interval", type=int, default=60, help="Polling interval in seconds.")
     parser.add_argument("--max-records", type=int, default=500, help="Recent records to scan per Windows log.")
+    parser.add_argument("--collector-token", default=os.getenv("SYSTEM_COLLECTOR_TOKEN", ""), help="Shared token for the system event collector.")
+    parser.add_argument("--employee-email", default=os.getenv("EMPLOYEE_EMAIL", ""), help="Employee email to scope collector events.")
+    parser.add_argument("--idle-threshold", type=int, default=300, help="Seconds without OS input before idle is reported.")
     parser.add_argument("--once", action="store_true", help="Collect events once and exit.")
     args = parser.parse_args()
 
     if platform.system() != "Windows":
         raise SystemExit("System event monitoring is available only on Windows.")
 
+    if args.employee_email:
+        os.environ["EMPLOYEE_EMAIL"] = args.employee_email
+
     if args.once:
-        run_once(args.api_url, args.max_records)
+        run_once(args.api_url, args.max_records, args.collector_token, args.idle_threshold)
         return
 
     print("Windows system event monitor started. Press Ctrl+C to stop.", flush=True)
     while True:
         try:
-            run_once(args.api_url, args.max_records)
+            run_once(args.api_url, args.max_records, args.collector_token, args.idle_threshold)
         except KeyboardInterrupt:
             raise
         except Exception as error:

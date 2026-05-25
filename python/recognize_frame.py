@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from config import CONFIDENCE_THRESHOLD, EMBEDDINGS_PATH
+from config import CONFIDENCE_MARGIN, CONFIDENCE_THRESHOLD, EMBEDDINGS_PATH
 from liveness_detection import LivenessDetector
 from utils import (
     build_embedding_model,
@@ -37,11 +37,20 @@ def load_embeddings():
 
 
 def find_best_match(embedding, labels, embeddings):
-    scores = [cosine_similarity(embedding, stored) for stored in embeddings]
-    if not scores:
-        return None, 0.0
-    best_index = int(np.argmax(scores))
-    return str(labels[best_index]), float(scores[best_index])
+    label_scores = {}
+
+    for label, stored in zip(labels, embeddings):
+        score = cosine_similarity(embedding, stored)
+        label = str(label)
+        label_scores[label] = max(label_scores.get(label, 0.0), float(score))
+
+    if not label_scores:
+        return None, 0.0, 0.0
+
+    ranked_scores = sorted(label_scores.items(), key=lambda item: item[1], reverse=True)
+    best_label, best_score = ranked_scores[0]
+    second_score = ranked_scores[1][1] if len(ranked_scores) > 1 else 0.0
+    return best_label, float(best_score), float(second_score)
 
 
 def check_static_image_liveness(image: np.ndarray) -> dict:
@@ -169,11 +178,14 @@ def main():
 
     face_tensor = extract_face_tensor(image, face)
     embedding = compute_embedding(model, face_tensor)
-    label, score = find_best_match(embedding, labels, embeddings)
+    label, score, second_score = find_best_match(embedding, labels, embeddings)
+    margin = score - second_score
 
-    if not label or score < CONFIDENCE_THRESHOLD:
-        result["message"] = "Unknown face"
+    if not label or score < CONFIDENCE_THRESHOLD or margin < CONFIDENCE_MARGIN:
+        result["message"] = "Unknown face or confidence is too low"
         result["confidence"] = round(score, 4)
+        result["matchMargin"] = round(margin, 4)
+        result["threshold"] = CONFIDENCE_THRESHOLD
         result["matched"] = False
         print(json.dumps(result))
         return
@@ -182,6 +194,7 @@ def main():
     result["matched"] = True
     result["label"] = label
     result["confidence"] = round(score, 4)
+    result["matchMargin"] = round(margin, 4)
     result["box"] = {
         "x": int(face[0]),
         "y": int(face[1]),

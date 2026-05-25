@@ -41,6 +41,31 @@ function createCell(value) {
   return cell;
 }
 
+function formatDurationFrom(startedAt, checkoutAt = null) {
+  if (!startedAt) {
+    return '00:00:00';
+  }
+
+  const start = new Date(startedAt).getTime();
+  const end = checkoutAt ? new Date(checkoutAt).getTime() : Date.now();
+  const totalSeconds = Math.max(0, Math.floor((end - start) / 1000));
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function formatSeconds(totalSeconds = 0) {
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function sessionStatusClass(status) {
+  return String(status || 'Offline').toLowerCase().replace(/\s+/g, '-');
+}
+
 function renderStudents(students) {
   const tableBody = document.getElementById('students-table-body');
   if (!tableBody) {
@@ -53,7 +78,7 @@ function renderStudents(students) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = 4;
-    cell.textContent = 'No teachers added yet.';
+    cell.textContent = 'No students added yet.';
     row.appendChild(cell);
     tableBody.appendChild(row);
     return;
@@ -188,8 +213,40 @@ function renderSystemEvents(events) {
     row.appendChild(eventIdCell);
 
     row.appendChild(createCell(event.sourceLog || '-'));
-    row.appendChild(createCell(event.meaning || event.provider || '-'));
+    row.appendChild(createCell(event.message || event.meaning || event.provider || '-'));
     tableBody.appendChild(row);
+  });
+
+  renderSystemEventTimeline(events);
+}
+
+function renderSystemEventTimeline(events) {
+  const timeline = document.getElementById('system-event-timeline');
+  if (!timeline) {
+    return;
+  }
+
+  timeline.innerHTML = '';
+  if (!events.length) {
+    timeline.innerHTML = '<div class="enterprise-timeline-item"><span class="timeline-dot"></span><div><strong>No timeline events yet</strong><p>Events will appear when work-session tracking starts.</p></div></div>';
+    return;
+  }
+
+  events.slice(-24).reverse().forEach((event) => {
+    const item = document.createElement('div');
+    item.className = 'enterprise-timeline-item';
+    const dot = document.createElement('span');
+    dot.className = 'timeline-dot';
+    const body = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = event.event || 'Activity';
+    const meta = document.createElement('p');
+    meta.textContent = `${new Date(event.occurredAt).toLocaleString()} · ${event.user || 'Unknown employee'} · ${event.deviceState || event.computer || 'Device info pending'}`;
+    const detail = document.createElement('small');
+    detail.textContent = `${event.sessionStatus || 'Session status pending'} · ${event.message || event.meaning || '-'}`;
+    body.append(title, meta, detail);
+    item.append(dot, body);
+    timeline.appendChild(item);
   });
 }
 
@@ -334,13 +391,317 @@ function updateSystemEventsSummary(data) {
   }
 }
 
-async function refreshHomeData() {
-  const [studentsData, attendanceData] = await Promise.all([
-    fetchJson('/api/students'),
-    fetchJson('/api/attendance'),
-  ]);
+function connectSystemEventsStream() {
+  if (!document.getElementById('system-events-body') || typeof EventSource === 'undefined') {
+    return;
+  }
 
-  renderStudents(studentsData.students || []);
+  const status = document.getElementById('system-events-status');
+  const stream = new EventSource('/api/system-events/stream');
+  let refreshTimer = null;
+
+  stream.onopen = () => {
+    if (status) {
+      status.textContent = 'Live system event stream connected.';
+    }
+  };
+
+  stream.onmessage = () => {
+    if (refreshTimer) {
+      window.clearTimeout(refreshTimer);
+    }
+
+    refreshTimer = window.setTimeout(() => {
+      refreshSystemEvents();
+    }, 250);
+  };
+
+  stream.onerror = () => {
+    if (status) {
+      status.textContent = 'Live stream reconnecting. Fallback refresh is still active.';
+    }
+    const wsStatus = document.getElementById('system-ws-status');
+    if (wsStatus) {
+      wsStatus.textContent = 'Reconnecting stream';
+    }
+  };
+}
+
+function renderEmployeeSession(session) {
+  const status = document.getElementById('employee-session-status');
+  if (!status) {
+    return;
+  }
+
+  const activeSession = session || {};
+  const isCheckedOut = activeSession.status === 'Checked Out';
+  status.textContent = activeSession.status || 'Offline';
+
+  const deviceState = document.getElementById('employee-device-state');
+  if (deviceState) {
+    deviceState.textContent = activeSession.deviceState || 'Tracking starts after attendance';
+  }
+
+  const score = document.getElementById('employee-productivity-score');
+  if (score) {
+    score.textContent = `${Number(activeSession.productivityScore || 0)}%`;
+  }
+
+  const collector = document.getElementById('employee-collector-state');
+  if (collector) {
+    if (activeSession.monitoringConsent === 'Denied') {
+      collector.textContent = 'Permission Denied';
+    } else if (activeSession.monitoringConsent === 'Allowed' && activeSession._id && !isCheckedOut) {
+      collector.textContent = 'Device Collector Active';
+    } else {
+      collector.textContent = activeSession._id && !isCheckedOut ? 'Permission Pending' : 'Stopped';
+    }
+  }
+
+  const timer = document.getElementById('employee-session-timer');
+  if (timer) {
+    timer.dataset.startedAt = activeSession.startedAt || '';
+    timer.dataset.checkoutAt = activeSession.checkoutAt || '';
+    timer.textContent = formatDurationFrom(activeSession.startedAt, activeSession.checkoutAt);
+  }
+
+  const eventList = document.getElementById('employee-session-events');
+  if (eventList) {
+    eventList.innerHTML = '';
+    const events = Array.isArray(activeSession.events) ? activeSession.events.slice(-8).reverse() : [];
+    if (!events.length) {
+      const empty = document.createElement('div');
+      empty.className = 'timeline-event';
+      empty.innerHTML = '<span class="timeline-dot"></span><div><strong>Waiting for session activity</strong><p>Attendance and system-level device activity will appear here.</p></div>';
+      eventList.appendChild(empty);
+    }
+
+    events.forEach((event) => {
+      const row = document.createElement('div');
+      row.className = 'timeline-event severity-success';
+      const dot = document.createElement('span');
+      dot.className = 'timeline-dot';
+      const body = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = event.type || 'Activity';
+      const details = document.createElement('p');
+      details.textContent = `${event.label || event.deviceState || '-'} · ${new Date(event.occurredAt).toLocaleTimeString()}`;
+      body.append(title, details);
+      row.append(dot, body);
+      eventList.appendChild(row);
+    });
+  }
+
+  if (isCheckedOut) {
+    stopEmployeeActivityCollector();
+    [document.getElementById('employee-checkout'), document.getElementById('employee-checkout-panel')].forEach((button) => {
+      if (button) {
+        button.disabled = true;
+      }
+    });
+  } else if (activeSession._id && activeSession.monitoringConsent === 'Pending') {
+    showMonitoringPermissionPrompt();
+  }
+}
+
+function renderAdminWorkSessions(sessions) {
+  const tableBody = document.getElementById('admin-work-session-body');
+  if (!tableBody) {
+    return;
+  }
+
+  tableBody.innerHTML = '';
+  if (!sessions.length) {
+    const row = document.createElement('tr');
+    const cell = createCell('No live work sessions yet.');
+    cell.colSpan = 9;
+    row.appendChild(cell);
+    tableBody.appendChild(row);
+  }
+
+  sessions.forEach((session) => {
+    const row = document.createElement('tr');
+    row.appendChild(createCell(session.employeeName || session.user?.name || 'Employee'));
+
+    const statusCell = document.createElement('td');
+    const status = document.createElement('span');
+    status.className = `session-pill ${sessionStatusClass(session.status)}`;
+    status.textContent = session.deviceState || session.status || 'Offline';
+    statusCell.appendChild(status);
+    row.appendChild(statusCell);
+
+    row.appendChild(createCell(session.startedAt ? new Date(session.startedAt).toLocaleTimeString() : '-'));
+    row.appendChild(createCell(formatSeconds(session.totalActiveSeconds)));
+    row.appendChild(createCell(formatSeconds(session.totalIdleSeconds)));
+    row.appendChild(createCell(formatSeconds(session.totalBreakSeconds)));
+    row.appendChild(createCell(session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleString() : '-'));
+
+    const duration = createCell(formatDurationFrom(session.startedAt, session.checkoutAt));
+    duration.dataset.sessionDuration = 'true';
+    duration.dataset.startedAt = session.startedAt || '';
+    duration.dataset.checkoutAt = session.checkoutAt || '';
+    row.appendChild(duration);
+
+    row.appendChild(createCell(session.checkoutAt ? 'Checked Out' : session.status === 'Monitoring Permission Denied' ? 'Monitoring Permission Denied' : 'Open'));
+    tableBody.appendChild(row);
+  });
+
+  const activeCount = document.getElementById('admin-active-count');
+  const onlineCount = document.getElementById('admin-online-count');
+  if (activeCount) {
+    activeCount.textContent = String(sessions.filter((session) => session.status === 'Active').length);
+  }
+  if (onlineCount) {
+    onlineCount.textContent = String(sessions.filter((session) => session.status !== 'Checked Out' && session.status !== 'Offline').length);
+  }
+}
+
+async function refreshWorkSessions() {
+  if (document.getElementById('employee-session-status')) {
+    const data = await fetchJson('/api/work-sessions/today');
+    renderEmployeeSession(data.session);
+  }
+
+  if (document.getElementById('admin-work-session-body')) {
+    const data = await fetchJson('/api/work-sessions/live');
+    renderAdminWorkSessions(data.sessions || []);
+  }
+}
+
+function connectWorkSessionStream() {
+  if (typeof EventSource === 'undefined' || (!document.getElementById('employee-session-status') && !document.getElementById('admin-work-session-body'))) {
+    return;
+  }
+
+  const employeeWs = document.getElementById('employee-ws-status');
+  const adminSync = document.getElementById('admin-session-sync');
+  const stream = new EventSource('/api/work-sessions/stream');
+
+  stream.onopen = () => {
+    if (employeeWs) {
+      employeeWs.textContent = 'Live stream connected.';
+    }
+    if (adminSync) {
+      adminSync.textContent = 'WebSocket connected';
+    }
+  };
+
+  stream.onmessage = () => {
+    refreshWorkSessions().catch(() => {});
+  };
+
+  stream.onerror = () => {
+    if (employeeWs) {
+      employeeWs.textContent = 'Live stream reconnecting.';
+    }
+    if (adminSync) {
+      adminSync.textContent = 'Reconnecting';
+    }
+  };
+}
+
+async function publishMonitoringConsent(type) {
+  if (!document.getElementById('employee-session-status')) {
+    return;
+  }
+
+  try {
+    const response = await fetchJson('/api/work-sessions/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        label:
+          type === 'Monitoring Permission Allowed'
+            ? 'Employee allowed system-level device activity monitoring for this work session.'
+            : 'Employee denied system-level device activity monitoring for this work session.',
+        deviceState: type === 'Monitoring Permission Allowed' ? 'Active Working' : 'Monitoring Permission Denied',
+      }),
+    });
+
+    if (response.tracking && response.session) {
+      renderEmployeeSession(response.session);
+    }
+  } catch (error) {
+    const sync = document.getElementById('employee-session-sync');
+    if (sync) {
+      sync.textContent = error.message;
+    }
+  }
+}
+
+function showMonitoringPermissionPrompt() {
+  if (!document.getElementById('employee-session-status')) {
+    return;
+  }
+
+  if (document.getElementById('monitoring-permission-modal')) {
+    return;
+  }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'monitoring-permission-modal';
+  backdrop.innerHTML = `
+    <div class="checkout-modal permission-modal">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Monitoring Permission</p>
+          <h2>Device activity monitoring</h2>
+        </div>
+      </div>
+      <p class="helper-text">This organization wants permission to monitor your device activity during work sessions for productivity and attendance purposes.</p>
+      <div class="permission-list">
+        <span><i class="fa-solid fa-power-off"></i> System event access</span>
+        <span><i class="fa-solid fa-laptop-code"></i> Device activity monitoring</span>
+        <span><i class="fa-solid fa-moon"></i> Sleep and wakeup detection</span>
+        <span><i class="fa-solid fa-lock"></i> Lock and unlock tracking</span>
+      </div>
+      <div class="hero-actions">
+        <button id="allow-monitoring" class="btn btn-primary" type="button"><i class="fa-solid fa-circle-check"></i> Allow Monitoring</button>
+        <button id="deny-monitoring" class="btn btn-secondary" type="button"><i class="fa-solid fa-ban"></i> Deny</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  document.getElementById('allow-monitoring')?.addEventListener('click', async () => {
+    await publishMonitoringConsent('Monitoring Permission Allowed');
+    backdrop.remove();
+    showToast('System-level monitoring is enabled for this work session.');
+  });
+
+  document.getElementById('deny-monitoring')?.addEventListener('click', async () => {
+    await publishMonitoringConsent('Monitoring Permission Denied');
+    backdrop.remove();
+    showToast('Attendance remains marked. Admin will see monitoring permission denied.');
+  });
+}
+
+function stopEmployeeActivityCollector() {
+  // Native device tracking is handled by the Windows/Electron collector, not by browser activity logs.
+}
+
+function updateSessionTimers() {
+  const employeeTimer = document.getElementById('employee-session-timer');
+  if (employeeTimer) {
+    employeeTimer.textContent = formatDurationFrom(employeeTimer.dataset.startedAt, employeeTimer.dataset.checkoutAt);
+  }
+
+  document.querySelectorAll('[data-session-duration]').forEach((cell) => {
+    cell.textContent = formatDurationFrom(cell.dataset.startedAt, cell.dataset.checkoutAt);
+  });
+}
+
+async function refreshHomeData() {
+  const attendancePromise = fetchJson('/api/attendance');
+  const studentsPromise = document.getElementById('students-table-body')
+    ? fetchJson('/api/students')
+    : Promise.resolve({ students: [] });
+  const [studentsData, attendanceData] = await Promise.all([studentsPromise, attendancePromise]);
+
+  if (document.getElementById('students-table-body')) {
+    renderStudents(studentsData.students || []);
+  }
   renderAttendance(attendanceData.records || [], 'attendance-table-body', 3);
 }
 
@@ -428,6 +789,18 @@ function setScanLoading(isLoading) {
   }
 }
 
+function getCompressedFrameDataUrl(video, canvas, maxSide = 480, quality = 0.72) {
+  const sourceWidth = video.videoWidth || 640;
+  const sourceHeight = video.videoHeight || 480;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+
+  const context = canvas.getContext('2d', { alpha: false });
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 async function scanCurrentFrame() {
   if (scanInFlight) {
     return;
@@ -445,15 +818,9 @@ async function scanCurrentFrame() {
   setScanStatus('Scanning live frame...');
 
   try {
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-
-    const context = canvas.getContext('2d');
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
     const payload = {
-      image: canvas.toDataURL('image/jpeg', 0.9),
-      location: await getAttendanceLocation(),
+      image: getCompressedFrameDataUrl(video, canvas, 480, 0.72),
+      location: attendanceLocation,
     };
 
     const response = await fetchJson('/api/attendance/scan', {
@@ -465,7 +832,7 @@ async function scanCurrentFrame() {
     });
 
     if (response.recognized) {
-      const studentName = response.record?.student?.name || response.recognition?.label || 'Teacher';
+      const studentName = response.record?.student?.name || response.recognition?.label || 'Student';
       const confidence = response.recognition?.confidence || response.record?.confidence || 0;
       const isDuplicate = response.duplicate;
       
@@ -477,7 +844,7 @@ async function scanCurrentFrame() {
         setTimeout(() => {
           stopLiveCamera();
           setScanStatus('Camera stopped - Attendance process complete');
-          setRecognitionResult('Start the camera again for a new scan.', false);
+        setRecognitionResult('Start the camera again for a new scan.', false);
         }, 3000);
       } else {
         setScanStatus(`${studentName}'s attendance is already marked for today.`);
@@ -486,10 +853,13 @@ async function scanCurrentFrame() {
       await refreshHomeData();
     } else {
       const confidence = Number(response.confidence || 0).toFixed(3);
+      const matchMargin = Number(response.matchMargin || 0).toFixed(3);
+      const threshold = response.threshold ? Number(response.threshold).toFixed(2) : null;
+      const marginThreshold = response.marginThreshold ? Number(response.marginThreshold).toFixed(3) : null;
       const message = response.message || 'Face was not recognized.';
       const qualityIssues = response.quality_issues || [];
       
-      let displayMsg = message;
+      let displayMsg = `${message} Score: ${confidence}${threshold ? `/${threshold}` : ''}, margin: ${matchMargin}${marginThreshold ? `/${marginThreshold}` : ''}.`;
       if (qualityIssues && qualityIssues.length > 0) {
         displayMsg += ` | ${qualityIssues.join(' | ')}`;
       }
@@ -500,7 +870,7 @@ async function scanCurrentFrame() {
       setRecognitionResult(error.message, false);
     } finally {
       setScanLoading(false);
-      setScanStatus(cameraStream ? 'Camera live - Auto scan runs every 3 seconds.' : 'Camera stopped');
+      setScanStatus(cameraStream ? 'Camera live - Auto scan runs every 2 seconds.' : 'Camera stopped');
       scanInFlight = false;
     }
 }
@@ -543,7 +913,7 @@ async function getAttendanceLocation(forceRefresh = false) {
       },
       {
         enableHighAccuracy: true,
-        timeout: 8000,
+        timeout: 3000,
         maximumAge: 60000,
       }
     );
@@ -578,12 +948,12 @@ async function startLiveCamera() {
     video.srcObject = cameraStream;
     await video.play();
 
-    setScanStatus('Camera is live. Auto scan running every 3 seconds.');
+    setScanStatus('Camera is live. Auto scan running every 2 seconds.');
     setRecognitionResult('Live recognition is ready. Keep your face in front of the camera.');
     getAttendanceLocation(true);
 
-    scanInterval = window.setInterval(scanCurrentFrame, 3000);
-    window.setTimeout(scanCurrentFrame, 1200);
+    scanInterval = window.setInterval(scanCurrentFrame, 2000);
+    window.setTimeout(scanCurrentFrame, 700);
   } catch (error) {
     cameraStream = null;
     setScanStatus('Camera access blocked.');
@@ -702,23 +1072,19 @@ async function captureEnrollmentSamples() {
 
   enrollmentImages = [];
   renderEnrollmentPreview();
-  setEnrollmentSampleStatus('Capturing 12 face samples...');
+  const sampleCount = 8;
+  setEnrollmentSampleStatus(`Capturing ${sampleCount} compressed face samples...`);
 
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
-  const context = canvas.getContext('2d');
-
-  for (let index = 0; index < 12; index += 1) {
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    enrollmentImages.push(canvas.toDataURL('image/jpeg', 0.9));
+  for (let index = 0; index < sampleCount; index += 1) {
+    enrollmentImages.push(getCompressedFrameDataUrl(video, canvas, 360, 0.68));
     renderEnrollmentPreview();
-    setEnrollmentSampleStatus(`Captured ${index + 1}/12 face samples`);
+    setEnrollmentSampleStatus(`Captured ${index + 1}/${sampleCount} compressed face samples`);
     // Small delay so samples are not identical
     // eslint-disable-next-line no-await-in-loop
-    await new Promise((resolve) => window.setTimeout(resolve, 220));
+    await new Promise((resolve) => window.setTimeout(resolve, 160));
   }
 
-  setEnrollmentSampleStatus('Face samples are ready. Now save the teacher.');
+  setEnrollmentSampleStatus('Face samples are ready. Now save the student.');
 }
 
 async function refreshAttendancePage() {
@@ -750,6 +1116,8 @@ if (studentForm) {
     const formData = new FormData(studentForm);
     const payload = Object.fromEntries(formData.entries());
     payload.enrollmentImages = enrollmentImages;
+    const endpoint = studentForm.dataset.endpoint || '/api/students';
+    const method = studentForm.dataset.method || 'POST';
 
     if (enrollmentImages.length < 6) {
       if (formStatus) {
@@ -763,12 +1131,12 @@ if (studentForm) {
     }
 
     if (formStatus) {
-      formStatus.textContent = 'Teacher registration is in progress. Please wait...';
+      formStatus.textContent = 'Employee registration is in progress. Please wait...';
     }
 
     try {
-      await fetchJson('/api/students', {
-        method: 'POST',
+      await fetchJson(endpoint, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -776,8 +1144,8 @@ if (studentForm) {
       });
 
       if (formStatus) {
-        formStatus.textContent = 'Teacher saved and the model was trained. Open the attendance page to test it.';
-        showToast('Identity saved, Cloudinary synced, and AI model trained.');
+        formStatus.textContent = 'Employee saved and the model was trained. Open the attendance page to test it.';
+        showToast('Employee identity saved locally and AI model trained.');
       }
 
       studentForm.reset();
@@ -815,7 +1183,16 @@ const refreshSystemEventsButton = document.getElementById('refresh-system-events
 if (refreshSystemEventsButton) {
   refreshSystemEventsButton.addEventListener('click', refreshSystemEvents);
   refreshSystemEvents();
+  connectSystemEventsStream();
   window.setInterval(refreshSystemEvents, 30000);
+}
+
+if (document.getElementById('employee-session-status') || document.getElementById('admin-work-session-body')) {
+  refreshWorkSessions().catch(() => {});
+  connectWorkSessionStream();
+  updateSessionTimers();
+  window.setInterval(updateSessionTimers, 1000);
+  window.setInterval(() => refreshWorkSessions().catch(() => {}), 30000);
 }
 
 const startCameraButton = document.getElementById('start-camera');
@@ -850,6 +1227,93 @@ if (captureEnrollmentButton) {
   captureEnrollmentButton.addEventListener('click', captureEnrollmentSamples);
 }
 
+const signupRole = document.getElementById('signup-role');
+function updateSignupRoleFields() {
+  if (!signupRole) {
+    return;
+  }
+
+  const employeeFields = document.querySelectorAll('.employee-signup-field');
+  employeeFields.forEach((field) => {
+    const input = field.querySelector('input');
+    const isEmployee = signupRole.value === 'employee';
+    field.style.display = isEmployee ? 'grid' : 'none';
+    if (input) {
+      input.required = isEmployee && input.name === 'faceLabel';
+    }
+  });
+}
+
+if (signupRole) {
+  signupRole.addEventListener('change', updateSignupRoleFields);
+  updateSignupRoleFields();
+}
+
+const employeeCheckoutButton = document.getElementById('employee-checkout');
+const employeeCheckoutPanelButton = document.getElementById('employee-checkout-panel');
+const checkoutModal = document.getElementById('checkout-modal');
+const checkoutModalClose = document.getElementById('checkout-modal-close');
+const finishWorkSessionButton = document.getElementById('finish-work-session');
+
+function openCheckoutModal() {
+  if (checkoutModal) {
+    checkoutModal.hidden = false;
+    document.getElementById('checkout-note')?.focus();
+  }
+}
+
+function closeCheckoutModal() {
+  if (checkoutModal) {
+    checkoutModal.hidden = true;
+  }
+}
+
+if (employeeCheckoutButton) {
+  employeeCheckoutButton.addEventListener('click', openCheckoutModal);
+}
+
+if (employeeCheckoutPanelButton) {
+  employeeCheckoutPanelButton.addEventListener('click', openCheckoutModal);
+}
+
+if (checkoutModalClose) {
+  checkoutModalClose.addEventListener('click', closeCheckoutModal);
+}
+
+if (finishWorkSessionButton) {
+  finishWorkSessionButton.addEventListener('click', async () => {
+    const status = document.getElementById('checkout-modal-status');
+    const note = document.getElementById('checkout-note')?.value || '';
+    finishWorkSessionButton.disabled = true;
+
+    if (status) {
+      status.textContent = 'Closing today’s monitoring session...';
+    }
+
+    try {
+      const response = await fetchJson('/api/work-sessions/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      renderEmployeeSession(response.session);
+      closeCheckoutModal();
+      showToast(response.message || "Today's work session completed successfully.");
+      const actionStatus = document.getElementById('employee-action-status');
+      if (actionStatus) {
+        actionStatus.textContent = response.message || "Today's work session completed successfully.";
+      }
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message;
+      }
+      showToast(error.message);
+    } finally {
+      finishWorkSessionButton.disabled = false;
+    }
+  });
+}
+
 window.addEventListener('beforeunload', () => {
   stopLiveCamera();
   stopEnrollmentCamera();
@@ -863,7 +1327,7 @@ if (navbarRefreshButton) {
     if (currentPath === '/attendance') {
       refreshAttendancePage();
     } else {
-      window.location.href = '/';
+      window.location.href = '/admin';
     }
   });
 }

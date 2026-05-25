@@ -8,7 +8,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import cv2
 import numpy as np
 
-from config import CONFIDENCE_THRESHOLD, EMBEDDINGS_PATH
+from config import CONFIDENCE_MARGIN, CONFIDENCE_THRESHOLD, EMBEDDINGS_PATH
 from utils import (
     build_embedding_model,
     compute_embedding,
@@ -29,11 +29,20 @@ def load_embeddings():
 
 
 def find_best_match(embedding, labels, embeddings):
-    scores = [cosine_similarity(embedding, stored) for stored in embeddings]
-    if not scores:
-        return None, 0.0
-    best_index = int(np.argmax(scores))
-    return str(labels[best_index]), float(scores[best_index])
+    label_scores = {}
+
+    for label, stored in zip(labels, embeddings):
+        score = cosine_similarity(embedding, stored)
+        label = str(label)
+        label_scores[label] = max(label_scores.get(label, 0.0), float(score))
+
+    if not label_scores:
+        return None, 0.0, 0.0
+
+    ranked_scores = sorted(label_scores.items(), key=lambda item: item[1], reverse=True)
+    best_label, best_score = ranked_scores[0]
+    second_score = ranked_scores[1][1] if len(ranked_scores) > 1 else 0.0
+    return best_label, float(best_score), float(second_score)
 
 
 def recognize_image(model, detector, labels, embeddings, image_path):
@@ -58,14 +67,23 @@ def recognize_image(model, detector, labels, embeddings, image_path):
 
     face_tensor = extract_face_tensor(image, face)
     embedding = compute_embedding(model, face_tensor)
-    label, score = find_best_match(embedding, labels, embeddings)
+    label, score, second_score = find_best_match(embedding, labels, embeddings)
+    margin = score - second_score
 
-    if not label or score < CONFIDENCE_THRESHOLD:
+    if not label or score < CONFIDENCE_THRESHOLD or margin < CONFIDENCE_MARGIN:
+        if score >= CONFIDENCE_THRESHOLD and margin < CONFIDENCE_MARGIN:
+            message = "Face match is close, but another saved face looks too similar. Try scanning again with your face centered."
+        else:
+            message = "Face was not recognized with enough confidence. Please improve lighting, center your face, and scan again."
+
         return {
             "success": True,
             "matched": False,
-            "message": "Face was not recognized. This person is not in the student database.",
+            "message": message,
             "confidence": round(score, 4),
+            "matchMargin": round(margin, 4),
+            "threshold": CONFIDENCE_THRESHOLD,
+            "marginThreshold": CONFIDENCE_MARGIN,
         }
 
     return {
@@ -73,6 +91,7 @@ def recognize_image(model, detector, labels, embeddings, image_path):
         "matched": True,
         "label": label,
         "confidence": round(score, 4),
+        "matchMargin": round(margin, 4),
         "box": {
             "x": int(face[0]),
             "y": int(face[1]),

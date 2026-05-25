@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Work Monitor</title>
+  <link rel="stylesheet" href="../public/styles.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-panel">
+      <a href="#" class="navbar-logo auth-logo">
+        <span class="logo-icon">WM</span>
+        <span class="logo-text">Device<span>Monitor</span></span>
+      </a>
+      <div>
+        <p class="eyebrow">Windows collector</p>
+        <h1>System Activity Agent</h1>
+        <p class="helper-text">Collects startup, shutdown, sleep, wake, lock, unlock, active, idle and online heartbeat events only during approved work sessions.</p>
+      </div>
+      <form id="collector-form" class="stack-form">
+        <label><span>Employee Email</span><input name="employeeEmail" type="email" placeholder="employee@company.com" required></label>
+        <label><span>API URL</span><input name="apiUrl" value="http://localhost:8080/api/system-events/ingest" required></label>
+        <label><span>Collector Token</span><input name="collectorToken" type="password" placeholder="SYSTEM_COLLECTOR_TOKEN"></label>
+        <label><span>Idle Threshold Seconds</span><input name="idleThreshold" type="number" min="60" value="300"></label>
+        <div class="hero-actions">
+          <button class="btn btn-primary" type="submit">Start Collector</button>
+          <button id="stop-collector" class="btn btn-secondary" type="button">Stop</button>
+        </div>
+      </form>
+      <pre id="collector-log" class="form-status" style="white-space: pre-wrap; min-height: 180px;">Collector stopped.</pre>
+    </section>
+  </main>
+  <script>
+    const form = document.getElementById('collector-form');
+    const log = document.getElementById('collector-log');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const options = Object.fromEntries(new FormData(form).entries());
+      await window.deviceCollector.start(options);
+      log.textContent = 'Collector started.\n';
+    });
+    document.getElementById('stop-collector').addEventListener('click', async () => {
+      await window.deviceCollector.stop();
+      log.textContent += '\nCollector stopped.';
+    });
+    window.deviceCollector.onLog((message) => {
+      log.textContent += message;
+    });
+  </script>
+</body>
+</html>

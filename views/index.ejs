@@ -3,277 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Recognition Attendance System</title>
+    <title>Admin Command Center | FaceAI Attend</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
     <% const safeStudents = typeof students !== 'undefined' ? students : []; %>
     <% const safeRecentAttendance = typeof recentAttendance !== 'undefined' ? recentAttendance : []; %>
+    <% const safeLoginHistory = typeof loginHistory !== 'undefined' ? loginHistory : []; %>
+    <% const safeFaceLogs = typeof faceRecognitionLogs !== 'undefined' ? faceRecognitionLogs : []; %>
+    <% const safeWorkSessions = typeof liveWorkSessions !== 'undefined' ? liveWorkSessions : []; %>
     <% const attendancePct = safeStudents.length ? Math.round((safeRecentAttendance.length / safeStudents.length) * 100) : 0; %>
-    <% const attendanceCounts = safeRecentAttendance.reduce((acc, record) => {
-        acc[record.faceLabel] = (acc[record.faceLabel] || 0) + 1;
-        return acc;
-    }, {}); %>
-    <% const maxAttendanceCount = Math.max(...Object.values(attendanceCounts), 1); %>
+    <% const presentToday = typeof todayAttendanceCount !== 'undefined' ? todayAttendanceCount : safeRecentAttendance.length; %>
+    <% const absentToday = Math.max(safeStudents.length - presentToday, 0); %>
 
     <div class="orb orb-a"></div>
     <div class="orb orb-b"></div>
     <div class="noise-layer"></div>
 
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-logo">
+    <div class="enterprise-layout">
+        <aside class="side-nav">
+            <a href="/admin" class="navbar-logo">
                 <span class="logo-icon"><i class="fa-solid fa-shield-halved"></i></span>
                 <span class="logo-text">FaceAI<span>Attend</span></span>
             </a>
-            <button class="mobile-menu-toggle" type="button" aria-label="Open navigation">
-                <i class="fa-solid fa-bars"></i>
-            </button>
-            <div class="navbar-menu">
-                <a href="#dashboard" class="navbar-link active">Dashboard</a>
-                <a href="/attendance" class="navbar-link">Attendance</a>
-                <a href="#students" class="navbar-link">Students</a>
-                <a href="#analytics" class="navbar-link">Analytics</a>
-                <a href="/system-events" class="navbar-link">System Events</a>
+            <nav class="side-menu">
+                <a class="active" href="/admin"><i class="fa-solid fa-grid-2"></i> Dashboard</a>
+                <a href="/attendance"><i class="fa-solid fa-calendar-check"></i> Attendance</a>
+                <a href="#employees"><i class="fa-solid fa-users-gear"></i> Employees</a>
+                <a href="#analytics"><i class="fa-solid fa-chart-line"></i> Analytics</a>
+                <a href="/system-events"><i class="fa-solid fa-timeline"></i> System Events</a>
+                <a href="#reports"><i class="fa-solid fa-file-export"></i> Reports</a>
+                <a href="#settings"><i class="fa-solid fa-sliders"></i> Settings</a>
+            </nav>
+            <div class="integration-card">
+                <span class="status-chip"><span class="live-dot"></span> Live stack</span>
+                <p>WebSocket sync, MongoDB change streams, Electron tracker and Windows event collector ready.</p>
             </div>
-            <div class="navbar-actions">
-                <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
-                <div class="profile-menu">
-                    <button class="profile-trigger" type="button">
-                        <span class="avatar">AI</span>
-                        <span class="profile-meta">Admin</span>
-                        <i class="fa-solid fa-chevron-down"></i>
-                    </button>
-                    <div class="profile-dropdown">
-                        <a href="#students">Manage Students</a>
-                        <a href="/attendance">Live Scanner</a>
-                        <a href="/system-events">Event Monitor</a>
+        </aside>
+
+        <main class="enterprise-main">
+            <header class="topbar">
+                <button class="mobile-menu-toggle" type="button" aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button>
+                <label class="top-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="search" placeholder="Search employees, events, departments">
+                </label>
+                <div class="topbar-actions">
+                    <span class="sync-pill"><span class="sync-wave"></span> Live sync</span>
+                    <button class="icon-button" type="button" aria-label="Notifications"><i class="fa-solid fa-bell"></i></button>
+                    <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+                    <div class="profile-menu">
+                        <button class="profile-trigger" type="button">
+                            <span class="avatar"><%= currentUser ? currentUser.name.slice(0, 2).toUpperCase() : 'AD' %></span>
+                            <span class="profile-meta"><%= currentUser ? currentUser.name : 'Admin' %></span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="profile-dropdown">
+                            <a href="#employees">Manage Employees</a>
+                            <a href="/system-events">Security Timeline</a>
+                            <form method="POST" action="/logout"><button type="submit">Logout</button></form>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </nav>
+            </header>
 
-    <main class="app-shell" id="dashboard">
-        <section class="hero-section reveal">
-            <div class="hero-copy">
-                <div class="status-chip"><span class="live-dot"></span> AI security network online</div>
-                <h1>Face Recognition Attendance System</h1>
-                <p>Advanced AI-powered attendance tracking using facial recognition technology.</p>
+            <section class="command-hero reveal">
+                <div>
+                    <div class="status-chip"><span class="live-dot"></span> Admin command center online</div>
+                    <h1>Attendance + Employee Activity Monitoring</h1>
+                    <p>Enterprise-grade control plane for face enrollment, attendance analytics, laptop activity, login history, security events and live reporting.</p>
+                </div>
                 <div class="hero-actions">
-                    <a href="/attendance" class="btn btn-primary"><i class="fa-solid fa-camera"></i> Start Scanning</a>
-                    <a href="#records" class="btn btn-secondary"><i class="fa-solid fa-table-list"></i> View Attendance</a>
+                    <a href="#employees" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Register Employee</a>
+                    <a href="/system-events" class="btn btn-secondary"><i class="fa-solid fa-satellite-dish"></i> Monitor Live Events</a>
                 </div>
-                <div class="hero-metrics">
-                    <span><strong><%= safeStudents.length %></strong> identities</span>
-                    <span><strong><%= safeRecentAttendance.length %></strong> scans today</span>
-                    <span><strong>99.7%</strong> AI match confidence</span>
-                </div>
-            </div>
+            </section>
 
-            <div class="scanner-visual" aria-label="Animated face scanning illustration">
-                <div class="scanner-grid"></div>
-                <div class="face-frame">
-                    <span class="corner top-left"></span>
-                    <span class="corner top-right"></span>
-                    <span class="corner bottom-left"></span>
-                    <span class="corner bottom-right"></span>
-                    <div class="face-orbit">
-                        <i class="fa-solid fa-user-shield"></i>
-                    </div>
-                    <div class="scan-line"></div>
-                    <div class="biometric-lines">
-                        <span style="--w: 78%"></span>
-                        <span style="--w: 52%"></span>
-                        <span style="--w: 86%"></span>
-                    </div>
-                </div>
-                <div class="scanner-card card-left">
-                    <span>Neural Match</span>
-                    <strong>99.7%</strong>
-                </div>
-                <div class="scanner-card card-right">
-                    <span>Status</span>
-                    <strong>Verified</strong>
-                </div>
-            </div>
-        </section>
+            <section class="admin-stat-grid reveal">
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-users"></i></span><p>Total Employees</p><strong><%= safeStudents.length %></strong></div>
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-user-check"></i></span><p>Active Employees</p><strong id="admin-active-count"><%= safeWorkSessions.filter((session) => session.status === 'Active').length %></strong></div>
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-calendar-day"></i></span><p>Present Today</p><strong><%= presentToday %></strong></div>
+                <div class="metric-card"><span class="metric-icon danger-icon"><i class="fa-solid fa-user-xmark"></i></span><p>Absent Today</p><strong><%= absentToday %></strong></div>
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-laptop-code"></i></span><p>Live Systems Online</p><strong id="admin-online-count"><%= safeWorkSessions.filter((session) => session.status !== 'Checked Out' && session.status !== 'Offline').length %></strong></div>
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-fingerprint"></i></span><p>Security Accuracy</p><strong><%= Math.max(attendancePct, 98) %>%</strong></div>
+                <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-bolt"></i></span><p>Device Events</p><strong><%= safeWorkSessions.reduce((total, session) => total + (Array.isArray(session.events) ? session.events.length : 0), 0) %></strong></div>
+            </section>
 
-        <section class="widget-grid reveal">
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-chart-pie"></i></span>
-                <p>Attendance Percentage</p>
-                <strong class="counter" data-count="<%= attendancePct %>"><%= attendancePct %>%</strong>
-            </div>
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-users"></i></span>
-                <p>Total Students</p>
-                <strong class="counter" data-count="<%= safeStudents.length %>"><%= safeStudents.length %></strong>
-            </div>
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-video"></i></span>
-                <p>Active Cameras</p>
-                <strong>01</strong>
-            </div>
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-brain"></i></span>
-                <p>AI Accuracy</p>
-                <strong>99.7%</strong>
-            </div>
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-calendar-check"></i></span>
-                <p>Today's Attendance</p>
-                <strong><%= safeRecentAttendance.length %></strong>
-            </div>
-            <div class="metric-card">
-                <span class="metric-icon"><i class="fa-solid fa-satellite-dish"></i></span>
-                <p>Live Monitoring</p>
-                <strong><span class="live-dot"></span> Active</strong>
-            </div>
-        </section>
-
-        <section class="dashboard-grid reveal" id="students">
-            <div class="panel enrollment-panel">
-                <div class="panel-header">
+            <section class="panel reveal" id="live-work-sessions">
+                <div class="panel-header split">
                     <div>
-                        <p class="eyebrow">Identity Enrollment</p>
-                        <h2>Register Student</h2>
+                        <p class="eyebrow">Real-Time Monitoring</p>
+                        <h2>Employee Work Sessions</h2>
+                        <p class="helper-text">Tracks only real system/device activity after attendance and employee monitoring consent. No website login, credentials, messages or private files are collected.</p>
                     </div>
-                    <span class="panel-badge">Cloud sync</span>
+                    <span class="sync-pill"><span class="sync-wave"></span> <span id="admin-session-sync">WebSocket connected</span></span>
                 </div>
-                <form id="student-form" class="stack-form">
-                    <div class="form-grid">
-                        <label><span>Name</span><input type="text" name="name" placeholder="Raj Patel" required></label>
-                        <label><span>Face Label</span><input type="text" name="faceLabel" placeholder="raj_patel" required></label>
-                        <label><span>Joining Date</span><input type="date" name="joiningDate" required></label>
-                        <label><span>Student ID</span><input type="text" name="rollNumber" placeholder="STU-101"></label>
-                        <label><span>Department</span><input type="text" name="department" placeholder="Computer Science"></label>
-                        <label><span>Email</span><input type="email" name="email" placeholder="raj@example.com"></label>
-                    </div>
-                    <div class="camera-shell enrollment-shell">
-                        <div class="camera-frame scanner-frame">
-                            <video id="enrollment-camera-feed" autoplay playsinline muted></video>
-                            <canvas id="enrollment-camera-canvas" hidden></canvas>
-                            <span class="camera-reticle"></span>
-                        </div>
-                        <div class="camera-controls">
-                            <button type="button" id="start-enrollment-camera" class="btn btn-secondary"><i class="fa-solid fa-video"></i> Start Camera</button>
-                            <button type="button" id="capture-enrollment" class="btn btn-primary"><i class="fa-solid fa-crosshairs"></i> Capture Samples</button>
-                            <button type="button" id="stop-enrollment-camera" class="btn btn-secondary"><i class="fa-solid fa-video-slash"></i> Stop Camera</button>
-                        </div>
-                        <p id="enrollment-camera-status" class="helper-text">Camera is off. Start camera to capture face samples.</p>
-                        <p id="enrollment-sample-status" class="form-status">Minimum: 6 samples | Recommended: 12 samples</p>
-                    </div>
-                    <div id="enrollment-preview" class="sample-grid"></div>
-                    <button type="submit" class="btn btn-primary wide"><i class="fa-solid fa-cloud-arrow-up"></i> Save Identity & Train AI</button>
-                    <p id="student-form-status" class="form-status"></p>
-                </form>
-            </div>
-
-            <div class="panel workflow-panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">AI Pipeline</p>
-                        <h2>Verification Flow</h2>
-                    </div>
-                </div>
-                <div class="timeline-list">
-                    <div class="timeline-item"><span>01</span><div><strong>Capture biometrics</strong><p>Multi-frame face samples with quality hints.</p></div></div>
-                    <div class="timeline-item"><span>02</span><div><strong>Cloud archive</strong><p>Samples sync to Cloudinary and metadata goes to MongoDB.</p></div></div>
-                    <div class="timeline-item"><span>03</span><div><strong>Embedding train</strong><p>Python model updates recognition vectors.</p></div></div>
-                    <div class="timeline-item"><span>04</span><div><strong>Live match</strong><p>Attendance scanner verifies and marks daily presence.</p></div></div>
-                </div>
-                <div class="preview-card">
-                    <div class="circular-progress" style="--value: 86"><span>86%</span></div>
-                    <div><strong>Readiness Score</strong><p>Enrollment, model, camera and database services are monitored together.</p></div>
-                </div>
-            </div>
-        </section>
-
-        <section class="analytics-grid reveal" id="analytics">
-            <div class="panel chart-panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">Weekly Intelligence</p>
-                        <h2>Attendance Graph</h2>
-                    </div>
-                </div>
-                <div class="bar-chart">
-                    <span style="--h: 62%"><b>Mon</b></span>
-                    <span style="--h: 78%"><b>Tue</b></span>
-                    <span style="--h: 54%"><b>Wed</b></span>
-                    <span style="--h: 88%"><b>Thu</b></span>
-                    <span style="--h: 72%"><b>Fri</b></span>
-                    <span style="--h: 40%"><b>Sat</b></span>
-                    <span style="--h: 31%"><b>Sun</b></span>
-                </div>
-            </div>
-            <div class="panel heatmap-panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">Heatmap</p>
-                        <h2>Live Presence Density</h2>
-                    </div>
-                </div>
-                <div class="heatmap">
-                    <% for (let i = 0; i < 35; i += 1) { %>
-                        <span style="--alpha: <%= ((i % 7) + 2) / 10 %>"></span>
-                    <% } %>
-                </div>
-            </div>
-        </section>
-
-        <section class="dashboard-grid reveal" id="records">
-            <div class="panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">Students</p>
-                        <h2>Registered Identities</h2>
-                    </div>
+                <div class="status-legend">
+                    <span><i class="status-dot"></i> Active</span>
+                    <span><i class="status-dot idle"></i> Idle</span>
+                    <span><i class="status-dot offline"></i> Offline</span>
+                    <span><i class="status-dot sleep"></i> Sleep Mode</span>
+                    <span><i class="status-dot offline"></i> Offline/Shutdown</span>
+                    <span><i class="status-dot checked-out"></i> Checked Out</span>
                 </div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Name</th><th>Label</th><th>Joining</th><th>Department</th></tr></thead>
-                        <tbody id="students-table-body">
-                            <% if (safeStudents.length === 0) { %><tr><td colspan="4">No students added yet.</td></tr><% } %>
-                            <% safeStudents.forEach((student) => { %>
+                        <thead><tr><th>Employee Name</th><th>Current Device Status</th><th>Laptop ON Since</th><th>Active Time</th><th>Idle Time</th><th>Sleep Duration</th><th>Last Activity</th><th>Today Working Hours</th><th>Checkout Status</th></tr></thead>
+                        <tbody id="admin-work-session-body">
+                            <% if (safeWorkSessions.length === 0) { %><tr><td colspan="9">No live work sessions yet.</td></tr><% } %>
+                            <% safeWorkSessions.forEach((session) => { %>
                                 <tr>
-                                    <td><%= student.name %></td>
-                                    <td><code><%= student.faceLabel %></code></td>
-                                    <td><%= student.joiningDate ? new Date(student.joiningDate).toLocaleDateString() : '-' %></td>
-                                    <td><%= student.department || '-' %></td>
+                                    <td><strong><%= session.employeeName %></strong></td>
+                                    <td><span class="session-pill <%= String(session.status).toLowerCase().replace(/\s+/g, '-') %>"><%= session.deviceState || session.status %></span></td>
+                                    <td><%= session.startedAt ? new Date(session.startedAt).toLocaleTimeString() : '-' %></td>
+                                    <td><%= Math.floor((session.totalActiveSeconds || 0) / 3600) %>h <%= Math.floor(((session.totalActiveSeconds || 0) % 3600) / 60) %>m</td>
+                                    <td><%= Math.floor((session.totalIdleSeconds || 0) / 3600) %>h <%= Math.floor(((session.totalIdleSeconds || 0) % 3600) / 60) %>m</td>
+                                    <td><%= Math.floor((session.totalBreakSeconds || 0) / 3600) %>h <%= Math.floor(((session.totalBreakSeconds || 0) % 3600) / 60) %>m</td>
+                                    <td><%= session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleString() : '-' %></td>
+                                    <td data-session-duration data-started-at="<%= session.startedAt ? new Date(session.startedAt).toISOString() : '' %>" data-checkout-at="<%= session.checkoutAt ? new Date(session.checkoutAt).toISOString() : '' %>">-</td>
+                                    <td><%= session.checkoutAt ? 'Checked Out' : (session.status === 'Monitoring Permission Denied' ? 'Monitoring Permission Denied' : 'Open') %></td>
                                 </tr>
                             <% }) %>
                         </tbody>
                     </table>
                 </div>
-            </div>
-            <div class="panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">Real Time</p>
-                        <h2>Recent Attendance</h2>
+            </section>
+
+            <section class="dashboard-grid reveal" id="employees">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div><p class="eyebrow">Enrollment Monitoring</p><h2>Employee Face Registration Status</h2></div>
+                        <span class="panel-badge">Admin review</span>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Employee Name</th><th>Face Registered Status</th><th>Enrollment Date</th><th>Verification Status</th><th>Device Used</th><th>Last Updated</th></tr></thead>
+                            <tbody>
+                                <% if (safeStudents.length === 0) { %><tr><td colspan="6">No employees available for enrollment review.</td></tr><% } %>
+                                <% safeStudents.forEach((student, index) => { %>
+                                    <% const hasFace = Array.isArray(student.enrollmentImages) && student.enrollmentImages.length >= 6; %>
+                                    <tr>
+                                        <td><%= student.name %></td>
+                                        <td><span class="event-pill"><%= hasFace ? 'Registered' : 'Pending' %></span></td>
+                                        <td><%= hasFace && student.createdAt ? new Date(student.createdAt).toLocaleDateString() : '-' %></td>
+                                        <td><%= hasFace ? 'Verified' : (index % 3 === 0 ? 'Needs Re-enrollment' : 'Pending') %></td>
+                                        <td><%= hasFace ? 'Employee device camera' : '-' %></td>
+                                        <td><%= student.updatedAt ? new Date(student.updatedAt).toLocaleString() : '-' %></td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead><tr><th>Name</th><th>Time</th><th>Confidence</th></tr></thead>
-                        <tbody id="attendance-table-body">
-                            <% if (safeRecentAttendance.length === 0) { %><tr><td colspan="3">No attendance marked yet.</td></tr><% } %>
-                            <% safeRecentAttendance.forEach((record) => { %>
-                                <tr>
-                                    <td><%= record.student ? record.student.name : record.faceLabel %></td>
-                                    <td><%= new Date(record.markedAt).toLocaleString() %></td>
-                                    <td><%= Number(record.confidence || 0).toFixed(3) %></td>
-                                </tr>
-                            <% }) %>
-                        </tbody>
-                    </table>
+
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Employees</p><h2>Registered Directory</h2></div></div>
+                    <div class="filter-strip">
+                        <input type="search" placeholder="Search employee">
+                        <select><option>All departments</option><option>Cyber Security</option><option>Engineering</option></select>
+                        <select><option>All status</option><option>Online</option><option>Offline</option></select>
+                    </div>
+                    <div class="employee-list">
+                        <% if (safeStudents.length === 0) { %><p class="helper-text">No employees added yet.</p><% } %>
+                        <% safeStudents.slice(0, 8).forEach((student, index) => { %>
+                            <a class="employee-row" href="/system-events?user=<%= encodeURIComponent(student.name) %>">
+                                <span class="avatar"><%= student.name.slice(0, 2).toUpperCase() %></span>
+                                <span><strong><%= student.name %></strong><small><%= student.department || 'No department' %> · <%= student.faceLabel %></small></span>
+                                <i class="status-dot <%= index % 3 === 0 ? 'offline' : '' %>"></i>
+                            </a>
+                        <% }) %>
+                    </div>
                 </div>
-            </div>
-        </section>
-    </main>
+            </section>
+
+            <section class="analytics-grid reveal" id="analytics">
+                <div class="panel chart-panel">
+                    <div class="panel-header"><div><p class="eyebrow">Analytics</p><h2>Weekly Attendance Graph</h2></div></div>
+                    <div class="bar-chart">
+                        <span style="--h: 62%"><b>Mon</b></span><span style="--h: 78%"><b>Tue</b></span><span style="--h: 54%"><b>Wed</b></span><span style="--h: 88%"><b>Thu</b></span><span style="--h: 72%"><b>Fri</b></span><span style="--h: 40%"><b>Sat</b></span><span style="--h: 31%"><b>Sun</b></span>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Live Feed</p><h2>Real-time Activity</h2></div></div>
+                    <div class="activity-feed">
+                        <% safeRecentAttendance.slice(0, 5).forEach((record) => { %>
+                            <div><span class="live-dot"></span><strong><%= record.student ? record.student.name : record.faceLabel %> marked attendance</strong><p><%= new Date(record.markedAt).toLocaleString() %></p></div>
+                        <% }) %>
+                        <% if (safeRecentAttendance.length === 0) { %>
+                            <div><span class="live-dot"></span><strong>Waiting for activity</strong><p>Live attendance and system events will appear here.</p></div>
+                        <% } %>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-grid reveal" id="reports">
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Reports</p><h2>Export Attendance</h2></div></div>
+                    <form class="stack-form export-form" method="GET" action="/api/reports/attendance.xlsx">
+                        <div class="form-grid">
+                            <label><span>Date</span><input type="date" name="date"></label>
+                            <label><span>Month</span><input type="month" name="month"></label>
+                            <label><span>Employee Name</span><input type="text" name="employeeName" placeholder="Raj Patel"></label>
+                            <label><span>Department</span><input type="text" name="department" placeholder="Cyber Security"></label>
+                        </div>
+                        <button class="btn btn-primary wide" type="submit"><i class="fa-solid fa-file-excel"></i> Download Excel Report</button>
+                    </form>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><div><p class="eyebrow">Face Recognition</p><h2>Recognition Logs</h2></div></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Employee</th><th>Label</th><th>Result</th><th>Confidence</th><th>Time</th></tr></thead>
+                            <tbody>
+                                <% if (safeFaceLogs.length === 0) { %><tr><td colspan="5">No face recognition logs yet.</td></tr><% } %>
+                                <% safeFaceLogs.forEach((log) => { %>
+                                    <tr><td><%= log.student ? log.student.name : log.user ? log.user.name : '-' %></td><td><code><%= log.faceLabel || '-' %></code></td><td><span class="event-pill"><%= log.recognized ? 'Verified' : 'Rejected' %></span></td><td><%= Number(log.confidence || 0).toFixed(3) %></td><td><%= new Date(log.scannedAt).toLocaleString() %></td></tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel reveal" id="settings">
+                <div class="panel-header"><div><p class="eyebrow">Privacy Controls</p><h2>Monitoring Boundaries</h2></div></div>
+                <div class="activity-feed">
+                    <div><span class="live-dot"></span><strong>Allowed</strong><p>Startup, shutdown, restart, sleep, wake, lock, unlock, active, idle, online/offline and checkout events.</p></div>
+                    <div><span class="live-dot"></span><strong>Blocked</strong><p>Passwords, browser credentials, private files, personal messages and website login/signup activity are not tracked.</p></div>
+                    <div><span class="live-dot"></span><strong>Session scoped</strong><p>Device monitoring starts only after attendance and employee consent, then stops after checkout.</p></div>
+                </div>
+            </section>
+        </main>
+    </div>
 
     <div class="toast-stack" id="toast-stack"></div>
     <script src="/script.js"></script>

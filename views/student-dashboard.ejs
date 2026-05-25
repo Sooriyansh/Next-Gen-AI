@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Activity Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+    <% const safeRecords = typeof records !== 'undefined' ? records : []; %>
+    <% const safeStudent = typeof student !== 'undefined' ? student : null; %>
+    <% const selectedLabel = typeof faceLabel !== 'undefined' ? faceLabel : ''; %>
+    <% const uniqueDays = new Set(safeRecords.map((record) => record.dateKey)).size; %>
+    <% const latestRecord = safeRecords[0]; %>
+
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="noise-layer"></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/student-dashboard" class="navbar-logo">
+                <span class="logo-icon"><i class="fa-solid fa-user-graduate"></i></span>
+                <span class="logo-text">FaceAI<span>Attend</span></span>
+            </a>
+            <button class="mobile-menu-toggle" type="button" aria-label="Open navigation">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="navbar-menu">
+                <a href="/student-dashboard" class="navbar-link active">My Activity</a>
+                <a href="/attendance" class="navbar-link">Mark Attendance</a>
+                <a href="/admin" class="navbar-link admin-only-link">Admin Dashboard</a>
+            </div>
+            <div class="navbar-actions">
+                <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="app-shell">
+        <section class="page-hero reveal">
+            <div>
+                <div class="status-chip"><span class="live-dot"></span> Student access</div>
+                <h1>My Activity</h1>
+                <p>Students can view only their own attendance history by entering their registered face label.</p>
+            </div>
+            <form class="role-search" method="GET" action="/student-dashboard">
+                <label>
+                    <span>Face Label</span>
+                    <input type="text" name="faceLabel" value="<%= selectedLabel %>" placeholder="raj_patel" required>
+                </label>
+                <button class="btn btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> View</button>
+            </form>
+        </section>
+
+        <% if (selectedLabel && !safeStudent) { %>
+            <section class="panel reveal">
+                <div class="empty-state">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <h2>No student found</h2>
+                    <p>No registered student exists with face label <code><%= selectedLabel %></code>.</p>
+                </div>
+            </section>
+        <% } %>
+
+        <% if (safeStudent) { %>
+            <section class="student-summary-grid reveal">
+                <div class="summary-tile">
+                    <span>Name</span>
+                    <strong><%= safeStudent.name %></strong>
+                </div>
+                <div class="summary-tile">
+                    <span>Face Label</span>
+                    <strong><code><%= safeStudent.faceLabel %></code></strong>
+                </div>
+                <div class="summary-tile">
+                    <span>Total Present Days</span>
+                    <strong><%= uniqueDays %></strong>
+                </div>
+                <div class="summary-tile">
+                    <span>Last Activity</span>
+                    <strong><%= latestRecord ? new Date(latestRecord.markedAt).toLocaleDateString() : '-' %></strong>
+                </div>
+            </section>
+
+            <section class="dashboard-grid reveal">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="eyebrow">Profile</p>
+                            <h2>Student Details</h2>
+                        </div>
+                    </div>
+                    <div class="detail-list">
+                        <div><span>Roll Number</span><strong><%= safeStudent.rollNumber || '-' %></strong></div>
+                        <div><span>Department</span><strong><%= safeStudent.department || '-' %></strong></div>
+                        <div><span>Email</span><strong><%= safeStudent.email || '-' %></strong></div>
+                        <div><span>Joining Date</span><strong><%= safeStudent.joiningDate ? new Date(safeStudent.joiningDate).toLocaleDateString() : '-' %></strong></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="eyebrow">Access Scope</p>
+                            <h2>Student View</h2>
+                        </div>
+                    </div>
+                    <div class="activity-feed">
+                        <div><span class="live-dot"></span><strong>Own records only</strong><p>This page filters activity by your face label.</p></div>
+                        <div><span class="live-dot"></span><strong>No enrollment controls</strong><p>Student view cannot register or manage identities.</p></div>
+                        <div><span class="live-dot"></span><strong>No system monitor</strong><p>System events remain admin-only in the UI.</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel reveal">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">Attendance</p>
+                        <h2>My Attendance Activity</h2>
+                    </div>
+                    <p class="helper-text">Showing latest <%= safeRecords.length %> record(s).</p>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Marked At</th><th>Status</th><th>Confidence</th><th>Location</th></tr>
+                        </thead>
+                        <tbody>
+                            <% if (safeRecords.length === 0) { %>
+                                <tr><td colspan="5">No attendance activity found for this student.</td></tr>
+                            <% } %>
+                            <% safeRecords.forEach((record) => { %>
+                                <tr>
+                                    <td><%= record.dateKey %></td>
+                                    <td><%= new Date(record.markedAt).toLocaleString() %></td>
+                                    <td><%= record.status || 'Present' %></td>
+                                    <td><%= Number(record.confidence || 0).toFixed(3) %></td>
+                                    <td>
+                                        <% if (record.location && record.location.latitude != null && record.location.longitude != null) { %>
+                                            <a href="https://www.google.com/maps?q=<%= record.location.latitude %>,<%= record.location.longitude %>" target="_blank" rel="noopener noreferrer">
+                                                <%= Number(record.location.latitude).toFixed(5) %>, <%= Number(record.location.longitude).toFixed(5) %>
+                                            </a>
+                                        <% } else { %>-<% } %>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        <% } %>
+    </main>
+
+    <div class="toast-stack" id="toast-stack"></div>
+    <script src="/script.js"></script>
+</body>
+</html>
